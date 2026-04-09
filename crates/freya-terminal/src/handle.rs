@@ -1,60 +1,38 @@
 use std::{
-    cell::{
-        Ref,
-        RefCell,
-    },
+    cell::{Ref, RefCell},
     io::Write,
     path::PathBuf,
     rc::Rc,
+    sync::atomic::{AtomicUsize, Ordering},
     time::Instant,
 };
 
 use freya_core::{
     notify::ArcNotify,
-    prelude::{
-        Platform,
-        TaskHandle,
-        UseId,
-        UserEvent,
-    },
+    prelude::{Platform, TaskHandle, UserEvent},
 };
-use keyboard_types::{
-    Key,
-    Modifiers,
-    NamedKey,
-};
-use portable_pty::{
-    MasterPty,
-    PtySize,
-};
+use keyboard_types::{Key, Modifiers, NamedKey};
+use portable_pty::{MasterPty, PtySize};
 use vt100::Parser;
 
 use crate::{
-    buffer::{
-        TerminalBuffer,
-        TerminalSelection,
-    },
+    buffer::{TerminalBuffer, TerminalSelection},
     parser::{
-        TerminalMouseButton,
-        encode_mouse_move,
-        encode_mouse_press,
-        encode_mouse_release,
+        TerminalMouseButton, encode_mouse_move, encode_mouse_press, encode_mouse_release,
         encode_wheel_event,
     },
-    pty::{
-        extract_buffer,
-        query_max_scrollback,
-        spawn_pty,
-    },
+    pty::{extract_buffer, query_max_scrollback, spawn_pty},
 };
 
 /// Unique identifier for a terminal instance
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TerminalId(pub usize);
 
+static NEXT_TERMINAL_ID: AtomicUsize = AtomicUsize::new(1);
+
 impl TerminalId {
     pub fn new() -> Self {
-        Self(UseId::<TerminalId>::get_in_hook())
+        Self(NEXT_TERMINAL_ID.fetch_add(1, Ordering::Relaxed))
     }
 }
 
@@ -138,6 +116,10 @@ pub struct TerminalHandle {
     pub(crate) pressed_button: Rc<RefCell<Option<TerminalMouseButton>>>,
     /// Current modifier keys state (shift, ctrl, alt, etc.).
     pub(crate) modifiers: Rc<RefCell<Modifiers>>,
+    /// Current inertial scroll velocity (lines/tick).
+    pub(crate) scroll_velocity: Rc<RefCell<f64>>,
+    /// Fractional line accumulator for sub-line scroll precision.
+    pub(crate) scroll_accumulator: Rc<RefCell<f64>>,
 }
 
 impl PartialEq for TerminalHandle {
@@ -329,6 +311,37 @@ impl TerminalHandle {
         }
 
         self.write(&data)
+    }
+
+    /// Write an inline image to the PTY using the iTerm2 escape sequence protocol.
+    ///
+    /// Encodes the image data as base64 and wraps it in an OSC 1337 sequence:
+    /// `ESC ] 1337 ; File=inline=1;size=<bytes>:<base64> ESC \`
+    pub fn write_inline_image(&self, data: &[u8], filename: &str) -> Result<(), TerminalError> {
+        use base64::Engine;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(data);
+        let seq = format!(
+            "\x1b]1337;File=inline=1;size={};name={}:{}\x1b\\",
+            data.len(),
+            base64::engine::general_purpose::STANDARD.encode(filename),
+            b64
+        );
+        self.write(seq.as_bytes())
+    }
+
+    /// Whether bracketed paste mode is enabled by the running application.
+    pub fn bracketed_paste(&self) -> bool {
+        self.parser.borrow().screen().bracketed_paste()
+    }
+
+    /// Whether application cursor key mode (DECCKM) is active.
+    pub fn application_cursor(&self) -> bool {
+        self.parser.borrow().screen().application_cursor()
+    }
+
+    /// Whether the terminal is in alternate screen mode.
+    pub fn alternate_screen(&self) -> bool {
+        self.parser.borrow().screen().alternate_screen()
     }
 
     /// Write data to the PTY without resetting scroll or selection state.
@@ -577,19 +590,13 @@ impl TerminalHandle {
         self.end_selection();
     }
 
-    /// Handle a wheel event intelligently.
+    /// Handle a wheel event with inertial scrolling.
     ///
-    /// The behavior depends on the terminal state:
-    /// - If viewing scrollback history: scrolls the scrollback buffer.
-    /// - If mouse tracking is enabled (e.g., vim, helix): sends wheel escape
-    ///   sequences to the PTY.
-    /// - If on the alternate screen without mouse tracking (e.g., gitui, less):
-    ///   sends arrow key sequences to the PTY (alternate scroll mode, like
-    ///   wezterm/kitty/alacritty).
-    /// - Otherwise (normal shell): scrolls the scrollback buffer.
-    pub fn wheel(&self, delta_y: f64, row: usize, col: usize) {
-        let scroll_delta = if delta_y > 0.0 { 3 } else { -3 };
-        let scroll_offset = self.buffer.borrow().scroll_offset;
+    /// Returns `true` if the caller should start a 60fps animation loop
+    /// calling `tick_inertial_scroll()` (only when transitioning from zero velocity).
+    ///
+    /// Alternate screen and mouse-tracking modes bypass inertia entirely.
+    pub fn wheel(&self, delta_y: f64, row: usize, col: usize) -> bool {
         let (mouse_mode, alt_screen, app_cursor) = {
             let parser = self.parser.borrow();
             let screen = parser.screen();
@@ -600,16 +607,12 @@ impl TerminalHandle {
             )
         };
 
-        if scroll_offset > 0 {
-            // User is viewing scrollback history
-            let delta = scroll_delta;
-            self.scroll(delta);
-        } else if mouse_mode != vt100::MouseProtocolMode::None {
-            // App has enabled mouse tracking (vim, helix, etc.)
+        // Mouse tracking or alternate screen: bypass inertia, send immediately
+        if mouse_mode != vt100::MouseProtocolMode::None {
             self.send_wheel_to_pty(row, col, delta_y);
-        } else if alt_screen {
-            // Alternate screen without mouse tracking (gitui, less, etc.)
-            // Send arrow key presses, matching wezterm/kitty/alacritty behavior
+            return false;
+        }
+        if alt_screen {
             let key = match (delta_y > 0.0, app_cursor) {
                 (true, true) => "\x1bOA",
                 (true, false) => "\x1b[A",
@@ -619,11 +622,55 @@ impl TerminalHandle {
             for _ in 0..Self::ALTERNATE_SCROLL_LINES {
                 let _ = self.write_raw(key.as_bytes());
             }
-        } else {
-            // Normal screen, no mouse tracking — scroll scrollback
-            let delta = scroll_delta;
-            self.scroll(delta);
+            return false;
         }
+
+        // Inertial scrolling for normal scrollback
+        let mut velocity = self.scroll_velocity.borrow_mut();
+        let was_zero = velocity.abs() < 0.1;
+
+        // Opposite direction cancels momentum
+        if (delta_y > 0.0 && *velocity < 0.0) || (delta_y < 0.0 && *velocity > 0.0) {
+            *velocity = 0.0;
+            *self.scroll_accumulator.borrow_mut() = 0.0;
+        }
+
+        *velocity += delta_y * 3.0;
+        *velocity = velocity.clamp(-50.0, 50.0);
+
+        // Apply immediate scroll for responsiveness
+        let immediate = if delta_y > 0.0 { 3 } else { -3 };
+        self.scroll(immediate);
+
+        was_zero && velocity.abs() >= 0.1
+    }
+
+    /// Tick the inertial scroll animation. Call at ~60fps.
+    /// Returns `true` if still animating, `false` when velocity has decayed to zero.
+    pub fn tick_inertial_scroll(&self) -> bool {
+        let mut velocity = self.scroll_velocity.borrow_mut();
+        if velocity.abs() < 0.1 {
+            *velocity = 0.0;
+            *self.scroll_accumulator.borrow_mut() = 0.0;
+            return false;
+        }
+
+        let mut acc = self.scroll_accumulator.borrow_mut();
+        *acc += *velocity;
+
+        let lines = acc.trunc() as i32;
+        *acc -= lines as f64;
+
+        if lines != 0 {
+            drop(acc);
+            drop(velocity);
+            self.scroll(lines);
+            *self.scroll_velocity.borrow_mut() *= 0.92;
+        } else {
+            *velocity *= 0.92;
+        }
+
+        self.scroll_velocity.borrow().abs() >= 0.1
     }
 
     /// Read the current terminal buffer.
