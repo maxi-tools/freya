@@ -597,6 +597,7 @@ impl TerminalHandle {
     ///
     /// Alternate screen and mouse-tracking modes bypass inertia entirely.
     pub fn wheel(&self, delta_y: f64, row: usize, col: usize) -> bool {
+        let scroll_offset = self.buffer.borrow().scroll_offset;
         let (mouse_mode, alt_screen, app_cursor) = {
             let parser = self.parser.borrow();
             let screen = parser.screen();
@@ -607,70 +608,85 @@ impl TerminalHandle {
             )
         };
 
-        // Mouse tracking or alternate screen: bypass inertia, send immediately
-        if mouse_mode != vt100::MouseProtocolMode::None {
-            self.send_wheel_to_pty(row, col, delta_y);
-            return false;
-        }
-        if alt_screen {
-            let key = match (delta_y > 0.0, app_cursor) {
-                (true, true) => "\x1bOA",
-                (true, false) => "\x1b[A",
-                (false, true) => "\x1bOB",
-                (false, false) => "\x1b[B",
-            };
-            for _ in 0..Self::ALTERNATE_SCROLL_LINES {
-                let _ = self.write_raw(key.as_bytes());
+        // Scrollback priority: if the user is viewing history, always scroll
+        // the scrollback buffer regardless of mouse-tracking/alt-screen state.
+        // This prevents wheel events from being hijacked by primary-screen apps
+        // that enable mouse tracking while the user is looking at scrollback.
+        if scroll_offset == 0 {
+            // Mouse tracking: bypass inertia, send immediately to PTY
+            if mouse_mode != vt100::MouseProtocolMode::None {
+                self.send_wheel_to_pty(row, col, delta_y);
+                return false;
             }
-            return false;
+            // Alternate screen without mouse tracking: send arrow keys
+            if alt_screen {
+                let key = match (delta_y > 0.0, app_cursor) {
+                    (true, true) => "\x1bOA",
+                    (true, false) => "\x1b[A",
+                    (false, true) => "\x1bOB",
+                    (false, false) => "\x1b[B",
+                };
+                for _ in 0..Self::ALTERNATE_SCROLL_LINES {
+                    let _ = self.write_raw(key.as_bytes());
+                }
+                return false;
+            }
         }
 
-        // Inertial scrolling for normal scrollback
-        let mut velocity = self.scroll_velocity.borrow_mut();
-        let was_zero = velocity.abs() < 0.1;
+        // Inertial scrolling for normal scrollback (or scrollback history).
+        // Compute new velocity without holding the borrow across self.scroll().
+        let was_zero;
+        let remaining_velocity;
+        {
+            let mut velocity = self.scroll_velocity.borrow_mut();
+            was_zero = velocity.abs() < 0.1;
 
-        // Opposite direction cancels momentum
-        if (delta_y > 0.0 && *velocity < 0.0) || (delta_y < 0.0 && *velocity > 0.0) {
-            *velocity = 0.0;
-            *self.scroll_accumulator.borrow_mut() = 0.0;
+            // Opposite direction cancels momentum
+            if (delta_y > 0.0 && *velocity < 0.0) || (delta_y < 0.0 && *velocity > 0.0) {
+                *velocity = 0.0;
+                *self.scroll_accumulator.borrow_mut() = 0.0;
+            }
+
+            *velocity += delta_y * 3.0;
+            *velocity = velocity.clamp(-50.0, 50.0);
+            remaining_velocity = *velocity;
         }
 
-        *velocity += delta_y * 3.0;
-        *velocity = velocity.clamp(-50.0, 50.0);
-
-        // Apply immediate scroll for responsiveness
+        // Apply immediate scroll for responsiveness (after dropping velocity borrow).
         let immediate = if delta_y > 0.0 { 3 } else { -3 };
         self.scroll(immediate);
 
-        was_zero && velocity.abs() >= 0.1
+        was_zero && remaining_velocity.abs() >= 0.1
     }
 
     /// Tick the inertial scroll animation. Call at ~60fps.
     /// Returns `true` if still animating, `false` when velocity has decayed to zero.
     pub fn tick_inertial_scroll(&self) -> bool {
-        let mut velocity = self.scroll_velocity.borrow_mut();
-        if velocity.abs() < 0.1 {
-            *velocity = 0.0;
-            *self.scroll_accumulator.borrow_mut() = 0.0;
-            return false;
-        }
+        // Scope the initial velocity check and compute the line delta without
+        // holding any borrows across `self.scroll()`, which itself borrows these cells.
+        let lines = {
+            let mut velocity = self.scroll_velocity.borrow_mut();
+            if velocity.abs() < 0.1 {
+                *velocity = 0.0;
+                *self.scroll_accumulator.borrow_mut() = 0.0;
+                return false;
+            }
 
-        let mut acc = self.scroll_accumulator.borrow_mut();
-        *acc += *velocity;
-
-        let lines = acc.trunc() as i32;
-        *acc -= lines as f64;
+            let mut acc = self.scroll_accumulator.borrow_mut();
+            *acc += *velocity;
+            let lines = acc.trunc() as i32;
+            *acc -= lines as f64;
+            lines
+        };
 
         if lines != 0 {
-            drop(acc);
-            drop(velocity);
             self.scroll(lines);
-            *self.scroll_velocity.borrow_mut() *= 0.92;
-        } else {
-            *velocity *= 0.92;
         }
 
-        self.scroll_velocity.borrow().abs() >= 0.1
+        // Apply friction and return still-animating status in one borrow.
+        let mut velocity = self.scroll_velocity.borrow_mut();
+        *velocity *= 0.92;
+        velocity.abs() >= 0.1
     }
 
     /// Read the current terminal buffer.
