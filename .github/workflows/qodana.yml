@@ -1,7 +1,5 @@
 # Shared Qodana CI workflow for maxi-tools repos.
 # Source of truth: maxi-config/workflows/qodana.yml
-#
-# Requires QODANA_TOKEN secret set at org level.
 
 name: Qodana
 
@@ -30,10 +28,13 @@ jobs:
           fetch-depth: 0
 
       - name: Qodana Scan
-        uses: JetBrains/qodana-action@v2025.3
+        uses: JetBrains/qodana-action@v2026.1
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
         with:
-          args: --image,jetbrains/qodana-rust:latest
-          pr-mode: true
+          pr-mode: false
+          use-caches: true
           post-pr-comment: true
+          use-annotations: true
+          upload-result: false
+          push-fixes: none
