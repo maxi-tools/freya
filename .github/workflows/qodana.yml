@@ -1,5 +1,5 @@
 # Shared Qodana CI workflow for maxi-tools repos.
-# Copy to .github/workflows/qodana.yml in each repo.
+# Source of truth: maxi-config/workflows/qodana.yml
 #
 # Requires QODANA_TOKEN secret set at org level.
 
@@ -13,22 +13,26 @@ on:
 
 jobs:
   qodana:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    env:
+      DOCKER_HOST: unix:///Users/maxi/.colima/default/docker.sock
     permissions:
       contents: write
       pull-requests: write
       checks: write
     steps:
+      - name: Setup PATH
+        run: echo "/opt/homebrew/bin" >> $GITHUB_PATH
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-      - name: 'Qodana Scan'
+
+      - name: Qodana Scan
         uses: JetBrains/qodana-action@v2025.3
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
         with:
           pr-mode: true
-          use-caches: true
           post-pr-comment: true
-          use-annotations: true
