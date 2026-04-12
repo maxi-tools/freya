@@ -1,5 +1,8 @@
 # Shared Qodana CI workflow for maxi-tools repos.
 # Source of truth: maxi-config/workflows/qodana.yml
+#
+# Runs Qodana via RustRover's headless inspect mode (native Rust analysis).
+# Requires RustRover 2026.1+ installed on self-hosted runners.
 
 name: Qodana
 
@@ -12,8 +15,6 @@ on:
 jobs:
   qodana:
     runs-on: [self-hosted, macOS]
-    env:
-      DOCKER_HOST: unix:///Users/maxi/.colima/default/docker.sock
     permissions:
       contents: write
       pull-requests: write
@@ -28,13 +29,13 @@ jobs:
           fetch-depth: 0
 
       - name: Qodana Scan
-        uses: JetBrains/qodana-action@v2026.1
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
-        with:
-          pr-mode: false
-          use-caches: true
-          post-pr-comment: true
-          use-annotations: true
-          upload-result: false
-          push-fixes: none
+        run: |
+          RESULTS_DIR="$RUNNER_TEMP/qodana/results"
+          mkdir -p "$RESULTS_DIR"
+          /Applications/RustRover.app/Contents/MacOS/rustrover inspect \
+            "$(pwd)" \
+            "$RESULTS_DIR" \
+            --qodana \
+            -v2
