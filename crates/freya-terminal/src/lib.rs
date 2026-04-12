@@ -80,16 +80,9 @@ pub mod prelude {
     pub use portable_pty::CommandBuilder;
 
     pub use crate::{
-        buffer::{
-            TerminalBuffer,
-            TerminalSelection,
-        },
+        buffer::{TerminalBuffer, TerminalSelection},
         element::Terminal,
-        handle::{
-            TerminalError,
-            TerminalHandle,
-            TerminalId,
-        },
+        handle::{TerminalError, TerminalHandle, TerminalId},
         parser::TerminalMouseButton,
     };
 }
