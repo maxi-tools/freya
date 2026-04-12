@@ -34,5 +34,6 @@ jobs:
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
         with:
+          args: --image,jetbrains/qodana-rust:latest
           pr-mode: true
           post-pr-comment: true
