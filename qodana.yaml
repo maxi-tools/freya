@@ -1,0 +1,23 @@
+# Qodana configuration for maxi-tools Rust repositories
+# https://www.jetbrains.com/help/qodana/qodana-yaml.html
+#
+# The v2026.1 action auto-detects the Rust linter from the project.
+# Individual repos can override with a local qodana.yaml.
+
+version: "1.0"
+
+profile:
+  name: qodana.starter
+
+exclude:
+  - name: All
+    paths:
+      - target
+      - .git
+      - .maxi-worktrees
+      - .claude/worktrees
+      - .worktrees
+      - node_modules
+      - vendor
+      - "**/tests/**"
+      - "**/benches/**"
