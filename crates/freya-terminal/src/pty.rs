@@ -265,5 +265,7 @@ pub(crate) fn setup_terminal_from_master(
         last_write_time: Rc::new(RefCell::new(Instant::now())),
         pressed_button: Rc::new(RefCell::new(None)),
         modifiers: Rc::new(RefCell::new(Modifiers::empty())),
+        scroll_velocity: Rc::new(RefCell::new(0.0)),
+        scroll_accumulator: Rc::new(RefCell::new(0.0)),
     })
 }
