@@ -22,19 +22,28 @@ exclude:
   # Noisy: flags every workflow without explicit permissions block
   # Tracked for real cleanup in maxi-tools/maxi-config#7
   - name: actions/missing-workflow-permissions
-  # Overly aggressive: flags diagnostic logging of session IDs, tier levels, credential names
+  # False positive: diagnostic logging of session IDs, tier levels, credential names
   - name: rust/cleartext-logging
     paths:
       - "**/daemon/**"
       - "**/audit/**"
       - "**/proficiency/**"
       - "**/orchestrator.*"
-  # False positives: Argon2 KDF parameters and test fixture passwords
+      - "**/session_parser.*"
+  # False positive: Argon2 KDF parameters and test fixture passwords
   - name: rust/hard-coded-cryptographic-value
     paths:
       - "**/tests/**"
       - "**/crypto.rs"
-  # False positives: intentional RDMA raw pointer allocation via posix_memalign
+  # False positive: intentional RDMA raw pointer allocation via posix_memalign
   - name: rust/access-invalid-pointer
     paths:
       - "**/transport-rdma/**"
+  # False positive: status_page.html uses escHtml() on all user values, served locally
+  - name: js/xss
+    paths:
+      - "**/status_page.html"
+  # False positive: puppeteer_server returns static error strings, no stack traces
+  - name: js/stack-trace-exposure
+    paths:
+      - "**/puppeteer_server.js"
