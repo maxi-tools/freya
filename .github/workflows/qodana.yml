@@ -13,6 +13,10 @@ on:
     branches: [master, main]
   pull_request:
 
+concurrency:
+  group: qodana-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   RUSTROVER_HOME: /Applications/RustRover.app/Contents
   JAVA_HOME: /Applications/RustRover.app/Contents/jbr/Contents/Home
@@ -20,6 +24,7 @@ env:
 jobs:
   qodana:
     runs-on: [self-hosted, macOS]
+    timeout-minutes: 15
     permissions:
       contents: write
       pull-requests: write
@@ -28,6 +33,9 @@ jobs:
     steps:
       - name: Setup PATH
         run: echo "/opt/homebrew/bin" >> $GITHUB_PATH
+
+      - name: Cleanup stale RustRover
+        run: pkill -f 'rustrover inspect' || true
 
       - uses: actions/checkout@v4
         with:
@@ -45,14 +53,11 @@ jobs:
             "$RESULTS_DIR" \
             --qodana \
             -v2
-          echo "=== Results ==="
-          find "$RESULTS_DIR" -type f | head -40
 
       - name: Upload to Qodana Cloud
         if: always() && env.QODANA_TOKEN != ''
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
-          DOCKER_HOST: unix:///Users/maxi/.colima/default/docker.sock
         run: |
           command -v qodana || brew install jetbrains/utils/qodana
           qodana send \
