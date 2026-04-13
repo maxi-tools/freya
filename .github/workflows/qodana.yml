@@ -2,7 +2,8 @@
 # Source of truth: maxi-config/workflows/qodana.yml
 #
 # Runs Qodana via RustRover's headless inspect mode (native Rust analysis).
-# Requires RustRover 2026.1+ installed on self-hosted runners.
+# Uploads results to Qodana Cloud and posts GitHub SARIF annotations.
+# Requires RustRover 2026.1+ and qodana CLI on self-hosted runners.
 
 name: Qodana
 
@@ -12,6 +13,10 @@ on:
     branches: [master, main]
   pull_request:
 
+env:
+  RUSTROVER_HOME: /Applications/RustRover.app/Contents
+  JAVA_HOME: /Applications/RustRover.app/Contents/jbr/Contents/Home
+
 jobs:
   qodana:
     runs-on: [self-hosted, macOS]
@@ -19,6 +24,7 @@ jobs:
       contents: write
       pull-requests: write
       checks: write
+      security-events: write
     steps:
       - name: Setup PATH
         run: echo "/opt/homebrew/bin" >> $GITHUB_PATH
@@ -34,8 +40,28 @@ jobs:
         run: |
           RESULTS_DIR="$RUNNER_TEMP/qodana/results"
           mkdir -p "$RESULTS_DIR"
-          /Applications/RustRover.app/Contents/MacOS/rustrover inspect \
+          $RUSTROVER_HOME/MacOS/rustrover inspect \
             "$(pwd)" \
             "$RESULTS_DIR" \
             --qodana \
             -v2
+          echo "=== Results ==="
+          find "$RESULTS_DIR" -type f | head -40
+
+      - name: Upload to Qodana Cloud
+        if: always() && env.QODANA_TOKEN != ''
+        env:
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+          DOCKER_HOST: unix:///Users/maxi/.colima/default/docker.sock
+        run: |
+          command -v qodana || brew install jetbrains/utils/qodana
+          qodana send \
+            --results-dir "$RUNNER_TEMP/qodana/results" \
+            --project-dir "$(pwd)" || echo "Cloud upload failed (non-fatal)"
+
+      - name: Upload SARIF to GitHub
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ runner.temp }}/qodana/results
+        continue-on-error: true
