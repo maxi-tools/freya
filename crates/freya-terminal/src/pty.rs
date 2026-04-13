@@ -1,46 +1,22 @@
-use std::{
-    cell::RefCell,
-    path::PathBuf,
-    rc::Rc,
-    time::Instant,
-};
+use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
 
 use freya_core::{
     notify::ArcNotify,
-    prelude::{
-        Platform,
-        UserEvent,
-        spawn_forever,
-    },
+    prelude::{Platform, UserEvent, spawn_forever},
 };
 use futures_lite::AsyncReadExt;
 use keyboard_types::Modifiers;
-use portable_pty::{
-    CommandBuilder,
-    MasterPty,
-    PtySize,
-    native_pty_system,
-};
+use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use termwiz::escape::{
-    Action,
-    CSI,
-    OperatingSystemCommand,
-    csi::{
-        Cursor,
-        Device,
-    },
+    Action, CSI, OperatingSystemCommand,
+    csi::{Cursor, Device},
     parser::Parser as TermwizParser,
 };
 use vt100::Parser;
 
 use crate::{
     buffer::TerminalBuffer,
-    handle::{
-        TerminalCleaner,
-        TerminalError,
-        TerminalHandle,
-        TerminalId,
-    },
+    handle::{TerminalCleaner, TerminalError, TerminalHandle, TerminalId},
 };
 
 /// Query the maximum scrollback available without disturbing the viewport.
@@ -276,5 +252,7 @@ pub(crate) fn spawn_pty(
         last_write_time: Rc::new(RefCell::new(Instant::now())),
         pressed_button: Rc::new(RefCell::new(None)),
         modifiers: Rc::new(RefCell::new(Modifiers::empty())),
+        scroll_velocity: Rc::new(RefCell::new(0.0)),
+        scroll_accumulator: Rc::new(RefCell::new(0.0)),
     })
 }
