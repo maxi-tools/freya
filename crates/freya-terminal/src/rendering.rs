@@ -1,8 +1,21 @@
-use std::hash::{Hash, Hasher};
+use std::hash::{
+    Hash,
+    Hasher,
+};
 
-use freya_core::{fifo_cache::FifoCache, prelude::Color};
+use freya_core::{
+    fifo_cache::FifoCache,
+    prelude::Color,
+};
 use freya_engine::prelude::{
-    Canvas, Font, FontCollection, Paint, Paragraph, ParagraphBuilder, ParagraphStyle, TextBlob,
+    Canvas,
+    Font,
+    FontCollection,
+    Paint,
+    Paragraph,
+    ParagraphBuilder,
+    ParagraphStyle,
+    TextBlob,
     TextStyle,
 };
 use rustc_hash::FxHasher;
