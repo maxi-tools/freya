@@ -18,3 +18,23 @@ exclude:
       - vendor
       - "**/tests/**"
       - "**/benches/**"
+      - "**/examples/**"
+  # Noisy: flags every workflow without explicit permissions block
+  # Tracked for real cleanup in maxi-tools/maxi-config#7
+  - name: actions/missing-workflow-permissions
+  # Overly aggressive: flags diagnostic logging of session IDs, tier levels, credential names
+  - name: rust/cleartext-logging
+    paths:
+      - "**/daemon/**"
+      - "**/audit/**"
+      - "**/proficiency/**"
+      - "**/orchestrator.*"
+  # False positives: Argon2 KDF parameters and test fixture passwords
+  - name: rust/hard-coded-cryptographic-value
+    paths:
+      - "**/tests/**"
+      - "**/crypto.rs"
+  # False positives: intentional RDMA raw pointer allocation via posix_memalign
+  - name: rust/access-invalid-pointer
+    paths:
+      - "**/transport-rdma/**"
