@@ -70,6 +70,8 @@
 pub mod buffer;
 pub mod colors;
 pub mod element;
+#[cfg(unix)]
+pub mod fd_pty;
 pub mod handle;
 pub mod parser;
 pub mod pty;
@@ -79,6 +81,8 @@ mod rendering;
 pub mod prelude {
     pub use portable_pty::CommandBuilder;
 
+    #[cfg(unix)]
+    pub use crate::fd_pty::RawFdMasterPty;
     pub use crate::{
         buffer::{TerminalBuffer, TerminalSelection},
         element::Terminal,

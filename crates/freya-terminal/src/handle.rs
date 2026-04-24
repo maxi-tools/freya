@@ -9,7 +9,7 @@ use std::{
 
 use freya_core::{
     notify::ArcNotify,
-    prelude::{Platform, TaskHandle, UserEvent},
+    prelude::{Platform, TaskHandle, UseId, UserEvent},
 };
 use keyboard_types::{Key, Modifiers, NamedKey};
 use portable_pty::{MasterPty, PtySize};
@@ -21,7 +21,7 @@ use crate::{
         TerminalMouseButton, encode_mouse_move, encode_mouse_press, encode_mouse_release,
         encode_wheel_event,
     },
-    pty::{extract_buffer, query_max_scrollback, spawn_pty},
+    pty::{extract_buffer, query_max_scrollback, setup_terminal_from_master, spawn_pty},
 };
 
 /// Unique identifier for a terminal instance
@@ -148,6 +148,35 @@ impl TerminalHandle {
         scrollback_length: Option<usize>,
     ) -> Result<Self, TerminalError> {
         spawn_pty(id, command, scrollback_length.unwrap_or(1000))
+    }
+
+    /// Create a terminal handle from a daemon-provided PTY file descriptor.
+    ///
+    /// The fd must be a valid, open PTY master. Ownership is transferred —
+    /// freya-terminal will close it when the handle is dropped.
+    ///
+    /// # Safety
+    /// The caller must ensure `fd` is a valid PTY master file descriptor.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use freya_terminal::prelude::*;
+    /// use std::os::unix::io::RawFd;
+    ///
+    /// let fd: RawFd = 42; // obtained from daemon
+    /// let handle = unsafe {
+    ///     TerminalHandle::from_fd(TerminalId::new(), fd, None).unwrap()
+    /// };
+    /// ```
+    #[cfg(unix)]
+    pub unsafe fn from_fd(
+        id: TerminalId,
+        fd: std::os::unix::io::RawFd,
+        scrollback_length: Option<usize>,
+    ) -> Result<Self, TerminalError> {
+        let master = unsafe { crate::fd_pty::RawFdMasterPty::from_fd(fd) };
+        setup_terminal_from_master(id, Box::new(master), scrollback_length.unwrap_or(1000))
     }
 
     /// Refresh the terminal buffer from the parser, preserving selection state.
