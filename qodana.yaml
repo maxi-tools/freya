@@ -1,0 +1,25 @@
+version: '1.0'
+profile:
+  name: qodana.recommended
+exclude:
+- name: All
+  paths:
+  - target
+  - .git
+  - .maxi-worktrees
+  - .claude/worktrees
+  - .worktrees
+  - node_modules
+  - vendor
+  - '**/tests/**'
+  - '**/benches/**'
+  - '**/examples/**'
+- name: actions/missing-workflow-permissions
+- name: rust/cleartext-logging
+  paths:
+  - '**/daemon/**'
+  - '**/audit/**'
+  - '**/proficiency/**'
+  - '**/orchestrator.*'
+  - '**/session_parser.*'
+linter: qodana-rust
