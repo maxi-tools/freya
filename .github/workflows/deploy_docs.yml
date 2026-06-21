@@ -8,6 +8,8 @@ on:
 env:
   RUSTDOCFLAGS: "-D warnings"
 
+permissions: {}
+
 jobs:
   deploy:
     name: Deploy

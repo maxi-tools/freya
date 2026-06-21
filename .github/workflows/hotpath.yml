@@ -3,6 +3,8 @@ name: Hotpath
 on:
   pull_request:
 
+permissions: {}
+
 jobs:
   hotpath:
     runs-on: ubuntu-latest

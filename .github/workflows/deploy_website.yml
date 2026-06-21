@@ -5,6 +5,8 @@ on:
       - 'website/**/*'
       - '.github/workflows/deploy_website.yml'
 
+permissions: {}
+
 jobs:
   deploy:
     name: Deploy

@@ -21,6 +21,8 @@ env:
   RUSTROVER_HOME: /Applications/RustRover.app/Contents
   JAVA_HOME: /Applications/RustRover.app/Contents/jbr/Contents/Home
 
+permissions: {}
+
 jobs:
   qodana:
     runs-on: [self-hosted, macOS]
