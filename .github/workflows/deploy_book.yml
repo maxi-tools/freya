@@ -5,6 +5,8 @@ on:
       - 'book/**/*'
       - '.github/workflows/deploy_book.yml'
 
+permissions: {}
+
 jobs:
   deploy:
     name: Deploy
