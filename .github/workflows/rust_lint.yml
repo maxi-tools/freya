@@ -11,7 +11,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64]
     concurrency:
       group: rust-lint-${{ github.ref_name }}
       cancel-in-progress: true
@@ -48,7 +48,7 @@ jobs:
       run: just f-check
 
   build-macos:
-    runs-on: macos-latest
+    runs-on: [self-hosted, macOS, ARM64]
     concurrency:
       group: rust-lint-macos-${{ github.ref_name }}
       cancel-in-progress: true
