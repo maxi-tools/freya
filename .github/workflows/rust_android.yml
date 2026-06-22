@@ -11,6 +11,9 @@ env:
   ANDROID_NDK_HOME: /home/runner/android-ndk-r26d
   ANDROID_NDK: /home/runner/android-ndk-r26d
 
+permissions:
+  contents: read
+
 jobs:
   android:
     runs-on: [self-hosted, Linux, ARM64]

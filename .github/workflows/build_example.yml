@@ -8,12 +8,15 @@ on:
         required: true
         type: choice
         options:
-          - macos-latest
-          - ubuntu-latest
-          - windows-latest
+          - [self-hosted, macOS, ARM64]
+          - [self-hosted, Linux, ARM64]
+          - [self-hosted, Windows, X64]
       example_name:
         description: "Example name"
         required: true
+
+permissions:
+  contents: read
 
 jobs:
   build:

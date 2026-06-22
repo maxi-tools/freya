@@ -9,6 +9,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -17,7 +20,10 @@ jobs:
       cancel-in-progress: true
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os:
+          - [self-hosted, Linux, ARM64]
+          - [self-hosted, Windows, X64]
+          - [self-hosted, macOS, ARM64]
 
     steps:
     - uses: actions/checkout@v6
