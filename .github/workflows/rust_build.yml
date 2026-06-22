@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64]
     concurrency:
       group: rust-build-${{ github.ref_name }}
       cancel-in-progress: true
@@ -41,7 +41,7 @@ jobs:
       run: just ba
 
   build-macos:
-    runs-on: macos-latest
+    runs-on: [self-hosted, macOS, ARM64]
     concurrency:
       group: rust-build-macos-${{ github.ref_name }}
       cancel-in-progress: true

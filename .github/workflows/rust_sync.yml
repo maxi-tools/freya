@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   skia-bindings-sync:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64]
     concurrency:
       group: rust-sync-${{ github.ref_name }}
       cancel-in-progress: true

@@ -13,7 +13,7 @@ permissions: {}
 jobs:
   deploy:
     name: Deploy
-    runs-on: macos-latest
+    runs-on: [self-hosted, macOS, ARM64]
     permissions:
       id-token: write
       contents: read
