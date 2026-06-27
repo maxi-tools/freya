@@ -24,7 +24,11 @@ jobs:
     # Only run on same-repository PRs. pull_request workflows execute code from
     # the incoming branch, so self-hosted runners must not process fork PRs.
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux]
+    # macOS pool, not the [self-hosted, Linux, ARM64] lane: that lane's runners
+    # lack `gh`/`jq` (the rules step + the maxi-lint fold shell out to them) and
+    # it's the scarce 2-runner lane this org's lane policy keeps API/review work
+    # off of. The macOS runners have gh/jq + cargo for the maxi-lint self-heal.
+    runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 40
     permissions:
       pull-requests: write
