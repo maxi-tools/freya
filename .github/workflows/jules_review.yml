@@ -50,6 +50,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          export PATH="/opt/homebrew/bin:$PATH"
           files=$(gh api --paginate \
             "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
             --jq '.[] | select(.status != "removed") | .filename')
@@ -84,7 +85,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
+          export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
           # Self-heal: if maxi-lint isn't already on the runner, build+install it
           # from source via the runner's SSH credentials. maxi-lint has only
           # crates.io deps (no private git deps), so this is a ~1-minute cold
@@ -105,7 +106,11 @@ jobs:
           # Capture cleanly: `findings=$(cmd || echo [])` would concatenate any
           # partial stdout with the fallback and yield invalid JSON, so test the
           # exit status explicitly and fall back to an empty array.
-          if ! findings=$(timeout 120 maxi-lint --format json pr-code 2>/dev/null) || [ -z "$findings" ]; then
+          # `timeout` isn't on macOS by default; use it (or gtimeout) if present.
+          to=""
+          if command -v timeout >/dev/null 2>&1; then to="timeout 120"
+          elif command -v gtimeout >/dev/null 2>&1; then to="gtimeout 120"; fi
+          if ! findings=$($to maxi-lint --format json pr-code 2>/dev/null) || [ -z "$findings" ]; then
             findings='[]'
           fi
           changed=$(gh api --paginate \
