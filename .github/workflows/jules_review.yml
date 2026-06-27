@@ -4,12 +4,11 @@
 #   1. lists the PR's changed files,
 #   2. selects per-language rules (common + each language present) from the
 #      central jules-review/jules-rules in maxi-config,
-#   3. feeds the resulting ruleset to OUR fork of the reviewer action, whose
-#      patched prompt (jules-review/prompt.ts) places it up-front and demands
-#      JSON-only output.
+#   3. feeds the resulting ruleset to the maxi-reviewer action, whose
+#      prompt (jules-review/prompt.ts) places it up-front and demands JSON-only output.
 #
-# The maxi-owned fork bundles the patched prompt and review-repair behavior.
-# Move the v1-maxi tag after rebuilding dist/ from the maxi-prompt branch.
+# The prompt + review-repair behavior live in maxi-tools/maxi-reviewer.
+# To ship prompt changes, update that repo and move its v1 tag (see FORK.md).
 name: Jules PR Review
 on:
   pull_request:
@@ -136,9 +135,9 @@ jobs:
             echo "MAXI_LINT_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # Our fork bundles the patched prompt (jules-review/prompt.ts).
-      # Rebuild + move the v1-maxi tag to ship prompt changes (see FORK.md).
-      - uses: maxi-tools/jules-pr-reviewer@v1-maxi
+      # The prompt + review-repair behavior live in maxi-tools/maxi-reviewer (jules-review/prompt.ts).
+      # To ship prompt changes, update that repo and move its v1 tag (see FORK.md).
+      - uses: maxi-tools/maxi-reviewer@v1
         with:
           jules_api_key: ${{ secrets.JULES_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -151,3 +150,11 @@ jobs:
             ${{ steps.maxilint.outputs.text }}
           timeout_minutes: "30"
           fail_on: "blocking"
+          # Keep the required commit-status context stable (maxi-reviewer@v1
+          # defaults to maxi/review) so existing jules/review branch protection
+          # still passes across the synced fleet.
+          status_context: jules/review
+          # maxi-reviewer defaults analyzer_mode to auto and would run opengrep/pmd
+          # against the checked-out workspace (pr-code/.maxi-config), producing
+          # findings whose paths do not match the PR diff. Disable to avoid noise.
+          analyzer_mode: "off"
