@@ -1,0 +1,160 @@
+# maxi-config-owned Maxi PR review workflow.
+#
+# Drop this into a repo's .github/workflows/. It:
+#   1. lists the PR's changed files,
+#   2. selects per-language rules (common + each language present) from the
+#      central maxi-review/jules-rules in maxi-config,
+#   3. feeds the resulting ruleset to the maxi-reviewer action, whose
+#      prompt (maxi-review/prompt.ts) places it up-front and demands JSON-only output.
+#
+# The prompt + review-repair behavior live in maxi-tools/maxi-reviewer.
+# To ship prompt changes, update that repo and move its v1 tag (see FORK.md).
+name: Maxi Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: maxi-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Only run on same-repository PRs. pull_request workflows execute code from
+    # the incoming branch, so self-hosted runners must not process fork PRs.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    # macOS pool, not the [self-hosted, Linux, ARM64] lane: that lane's runners
+    # lack `gh`/`jq` (the rules step + the maxi-lint fold shell out to them) and
+    # it's the scarce 2-runner lane this org's lane policy keeps API/review work
+    # off of. The macOS runners have gh/jq + cargo for the maxi-lint self-heal.
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 40
+    permissions:
+      pull-requests: write
+      issues: write
+      contents: read
+      statuses: write
+    steps:
+      # Central rules + selector live in maxi-config (sparse checkout).
+      - name: Fetch maxi-review rules
+        uses: actions/checkout@v4
+        with:
+          repository: maxi-tools/maxi-config
+          path: .maxi-config
+          sparse-checkout: maxi-review
+          persist-credentials: false
+
+      - name: Select per-language rules from changed files
+        id: rules
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          export PATH="/opt/homebrew/bin:$PATH"
+          files=$(gh api --paginate \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --jq '.[] | select(.status != "removed") | .filename')
+          rules=$(printf '%s\n' "$files" | \
+            bash .maxi-config/maxi-review/select-rules.sh .maxi-config/maxi-review/jules-rules)
+          {
+            echo "text<<JULES_RULES_EOF"
+            echo "$rules"
+            echo "JULES_RULES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # Check out the PR head so the advisory maxi-lint pass has code to scan.
+      # Same-repo only (guarded by the job `if`), and maxi-lint only reads files
+      # (no execution), so this does not run untrusted code.
+      - name: Checkout PR head for maxi-lint
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr-code
+          persist-credentials: false
+
+      # Fold the maxi-lint pass into the review: run it, scope findings to the
+      # PR's changed files, and emit a Markdown block that the next step appends
+      # to extra_instructions (which our patched prompt injects up-front).
+      # Advisory only — `continue-on-error` plus PATH-gating mean it never
+      # blocks or fails the review, and non-Rust repos / runners without
+      # maxi-lint simply produce no block. Runners are expected to have
+      # maxi-lint on PATH (or ~/.cargo/bin); see maxi-tools/maxi-lint.
+      - name: Run maxi-lint (advisory)
+        id: maxilint
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
+          # Self-heal: if maxi-lint isn't already on the runner, build+install it
+          # from source via the runner's SSH credentials. maxi-lint has only
+          # crates.io deps (no private git deps), so this is a ~1-minute cold
+          # build that then lives in ~/.cargo/bin — subsequent runs on this
+          # runner hit the PATH check above and skip straight past. Best-effort:
+          # if cargo/SSH is unavailable the advisory pass cleanly no-ops below.
+          if ! command -v maxi-lint >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then
+            CARGO_NET_GIT_FETCH_WITH_CLI=true \
+              cargo install --git ssh://git@github.com/maxi-tools/maxi-lint maxi-lint --quiet 2>/dev/null || true
+          fi
+          if ! command -v maxi-lint >/dev/null 2>&1; then
+            echo "maxi-lint unavailable; skipping advisory lint pass"
+            printf 'text<<MAXI_LINT_EOF\nMAXI_LINT_EOF\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Bounded so a slow/pathological scan can't consume the job's review
+          # budget (continue-on-error only applies after the process exits).
+          # Capture cleanly: `findings=$(cmd || echo [])` would concatenate any
+          # partial stdout with the fallback and yield invalid JSON, so test the
+          # exit status explicitly and fall back to an empty array.
+          # `timeout` isn't on macOS by default; use it (or gtimeout) if present.
+          to=""
+          if command -v timeout >/dev/null 2>&1; then to="timeout 120"
+          elif command -v gtimeout >/dev/null 2>&1; then to="gtimeout 120"; fi
+          if ! findings=$($to maxi-lint --format json pr-code 2>/dev/null) || [ -z "$findings" ]; then
+            findings='[]'
+          fi
+          changed=$(gh api --paginate \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --jq '.[] | select(.status != "removed") | .filename' 2>/dev/null || echo "")
+          # Inject only maxi-lint's own trusted text (rule + suggestion) plus a
+          # control-char-stripped path/line. The PR-controlled matched snippet is
+          # dropped and the path is sanitized so a crafted filename cannot break
+          # out of this block into the authoritative extra_instructions channel.
+          # (The job already runs on same-repo PRs only — see the job `if`.)
+          block=$(printf '%s' "$findings" | jq -r --arg changed "$changed" '
+            ($changed | split("\n") | map(select(length > 0))) as $cf
+            | map((.file | sub("^pr-code/"; "")) as $rel0
+                  | select($cf | index($rel0))
+                  | ($rel0 | gsub("[\\u0000-\\u001f]"; "")) as $rel
+                  | "- \($rel):\(.line) [\(.rule)] \(.suggestion)")
+            | unique | .[]' 2>/dev/null || echo "")
+          {
+            echo "text<<MAXI_LINT_EOF"
+            if [ -n "$block" ]; then
+              printf '## maxi-lint findings (advisory)\n\nDeterministic maxi-convention violations in files changed by this PR (may include pre-existing violations on unchanged lines). Advisory context only — not blocking.\n\n%s\n' "$block"
+            fi
+            echo "MAXI_LINT_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # The prompt + review-repair behavior live in maxi-tools/maxi-reviewer (maxi-review/prompt.ts).
+      # To ship prompt changes, update that repo and move its v1 tag (see FORK.md).
+      - uses: maxi-tools/maxi-reviewer@v1
+        with:
+          jules_api_key: ${{ secrets.JULES_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Dynamic, per-language ruleset (selected above) instead of a static file.
+          # Our patched prompt treats extra_instructions as authoritative, up-front.
+          rules_file: ""
+          extra_instructions: |
+            ${{ steps.rules.outputs.text }}
+
+            ${{ steps.maxilint.outputs.text }}
+          timeout_minutes: "30"
+          fail_on: "blocking"
+          # Keep the required commit-status context stable (maxi-reviewer@v1
+          # defaults to maxi/review) so existing jules/review branch protection
+          # still passes across the synced fleet.
+          status_context: jules/review
+          # maxi-reviewer defaults analyzer_mode to auto and would run opengrep/pmd
+          # against the checked-out workspace (pr-code/.maxi-config), producing
+          # findings whose paths do not match the PR diff. Disable to avoid noise.
+          analyzer_mode: "off"
