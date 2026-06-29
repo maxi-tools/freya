@@ -35,6 +35,21 @@ jobs:
       contents: read
       statuses: write
     steps:
+      - name: Create Maxi Review app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.MAXI_REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MAXI_REVIEW_APP_PRIVATE_KEY }}
+          owner: maxi-tools
+          repositories: |
+            maxi-config
+            ${{ github.event.repository.name }}
+          permission-contents: read
+          permission-issues: write
+          permission-pull-requests: write
+          permission-statuses: write
+
       # Central rules + selector live in maxi-config (sparse checkout).
       - name: Fetch maxi-review rules
         uses: actions/checkout@v4
@@ -43,6 +58,7 @@ jobs:
           path: .maxi-config
           sparse-checkout: maxi-review
           persist-credentials: false
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Select per-language rules from changed files
         id: rules
@@ -140,7 +156,7 @@ jobs:
       - uses: maxi-tools/maxi-reviewer@v1
         with:
           jules_api_key: ${{ secrets.JULES_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ steps.app-token.outputs.token }}
           # Dynamic, per-language ruleset (selected above) instead of a static file.
           # Our patched prompt treats extra_instructions as authoritative, up-front.
           rules_file: ""
