@@ -12,7 +12,7 @@
 name: Maxi Review
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
 
 concurrency:
   group: maxi-review-${{ github.event.pull_request.number }}
@@ -20,14 +20,19 @@ concurrency:
 
 jobs:
   review:
-    # Only run on same-repository PRs. pull_request workflows execute code from
-    # the incoming branch, so self-hosted runners must not process fork PRs.
-    if: github.event.pull_request.head.repo.full_name == github.repository
-    # macOS pool, not the [self-hosted, Linux, ARM64] lane: that lane's runners
-    # lack `gh`/`jq` (the rules step + the maxi-lint fold shell out to them) and
-    # it's the scarce 2-runner lane this org's lane policy keeps API/review work
-    # off of. The macOS runners have gh/jq + cargo for the maxi-lint self-heal.
-    runs-on: [self-hosted, macOS, ARM64]
+    # Only run on same-repository PRs. In degraded economy mode this paid review
+    # lane is opt-in via the run-maxi-review label; strict mode restores automatic
+    # blocking review on normal PR events.
+    if: >
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (
+        vars.CI_ENFORCEMENT_MODE == 'strict' ||
+        contains(github.event.pull_request.labels.*.name, 'run-maxi-review')
+      )
+    # Portable macOS lane: review work needs gh/jq plus a macOS shell for the
+    # existing maxi-lint advisory path, but it should not queue behind the scarce
+    # self-hosted macOS pool during degraded CI economy rollout.
+    runs-on: warp-macos-15-arm64-6x
     timeout-minutes: 40
     permissions:
       pull-requests: write
@@ -37,7 +42,7 @@ jobs:
     steps:
       - name: Create Maxi Review app token
         id: app-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ vars.MAXI_REVIEW_APP_CLIENT_ID }}
           private-key: ${{ secrets.MAXI_REVIEW_APP_PRIVATE_KEY }}
@@ -52,7 +57,7 @@ jobs:
 
       # Central rules + selector live in maxi-config (sparse checkout).
       - name: Fetch maxi-review rules
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: maxi-tools/maxi-config
           path: .maxi-config
@@ -81,7 +86,7 @@ jobs:
       # Same-repo only (guarded by the job `if`), and maxi-lint only reads files
       # (no execution), so this does not run untrusted code.
       - name: Checkout PR head for maxi-lint
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: pr-code
