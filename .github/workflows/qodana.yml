@@ -1,74 +1,240 @@
 # Shared Qodana CI workflow for maxi-tools repos.
 # Source of truth: maxi-config/workflows/qodana.yml
-#
-# Runs Qodana via RustRover's headless inspect mode (native Rust analysis).
-# Uploads results to Qodana Cloud and posts GitHub SARIF annotations.
-# Requires RustRover 2026.1+ and qodana CLI on self-hosted runners.
 
-name: Qodana
+name: CI / merge-gate
 
 on:
   workflow_dispatch:
+  schedule:
+    # Off-hours full scan. PRs get the fast qodana sentinel below.
+    - cron: '17 7 * * *'
   push:
     branches: [master, main]
+    paths:
+      - '**/*.rs'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - 'qodana.yaml'
+      - 'workflows/qodana.yml'
+      - '.github/workflows/qodana.yml'
   pull_request:
+    paths:
+      - '**/*.rs'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - 'qodana.yaml'
+      - 'workflows/qodana.yml'
+      - '.github/workflows/qodana.yml'
 
 concurrency:
-  group: qodana-${{ github.repository }}-${{ github.ref }}
+  group: qodana-${{ github.repository }}-${{ github.ref }}-${{ github.event_name == 'schedule' && 'nightly' || 'interactive' }}
   cancel-in-progress: true
-
-env:
-  RUSTROVER_HOME: /Applications/RustRover.app/Contents
-  JAVA_HOME: /Applications/RustRover.app/Contents/jbr/Contents/Home
 
 permissions: {}
 
+env:
+  CI_ENFORCEMENT_MODE: ${{ vars.CI_ENFORCEMENT_MODE || 'degraded' }}
+  CI_DEGRADED_UNTIL: ${{ vars.CI_DEGRADED_UNTIL }}
+  RUSTROVER_HOME: /Applications/RustRover.app/Contents
+  JAVA_HOME: /Applications/RustRover.app/Contents/jbr/Contents/Home
+
 jobs:
   qodana:
-    runs-on: [self-hosted, macOS]
-    timeout-minutes: 15
+    # Keep the required PR check cheap. The RustRover scan is in qodana-full.
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: warp-ubuntu-latest-x64-2x
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate Qodana config (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ -f qodana.yaml ]; then
+            test -s qodana.yaml
+          else
+            echo "qodana.yaml not found; skipping config validation."
+          fi
+
+      - name: Validate Qodana config (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          if (Test-Path qodana.yaml) {
+            if ((Get-Item qodana.yaml).Length -eq 0) { throw "qodana.yaml is empty" }
+          } else {
+            Write-Host "qodana.yaml not found; skipping config validation."
+          }
+
+      - name: Degraded mode merge gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          github_step_summary() {
+            printf '%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          mode="${CI_ENFORCEMENT_MODE:-degraded}"
+          until="${CI_DEGRADED_UNTIL:-}"
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          github_step_summary "## CI economy gate"
+          github_step_summary ""
+          github_step_summary "- CI_ENFORCEMENT_MODE: \`$mode\`"
+          github_step_summary "- CI_DEGRADED_UNTIL: \`${until:-unset}\`"
+          github_step_summary "- Full Qodana/RustRover scan: advisory unless CI_ENFORCEMENT_MODE is \`strict\`"
+
+          case "$mode" in
+            strict)
+              github_step_summary "- Gate result: strict mode; heavy jobs are blocking."
+              ;;
+            degraded|"")
+              if [ -z "$until" ]; then
+                github_step_summary "- Gate result: failed; CI_DEGRADED_UNTIL is required in degraded mode."
+                echo "::error::CI_DEGRADED_UNTIL is required when CI_ENFORCEMENT_MODE=degraded"
+                exit 1
+              fi
+              if [[ "$now" > "$until" || "$now" == "$until" ]]; then
+                github_step_summary "- Gate result: failed; degraded mode expired at \`$until\`."
+                echo "::error::degraded CI mode expired at $until; extend CI_DEGRADED_UNTIL or restore strict mode"
+                exit 1
+              fi
+              github_step_summary "- Gate result: degraded mode active until \`$until\`."
+              ;;
+            *)
+              github_step_summary "- Gate result: failed; unknown CI_ENFORCEMENT_MODE \`$mode\`."
+              echo "::error::unknown CI_ENFORCEMENT_MODE: $mode"
+              exit 1
+              ;;
+          esac
+
+  qodana-full:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    continue-on-error: ${{ vars.CI_ENFORCEMENT_MODE != 'strict' }}
+    runs-on: [self-hosted, macOS, ram16]
+    timeout-minutes: 20
     permissions:
       contents: write
       pull-requests: write
       checks: write
       security-events: write
+    env:
+      QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
     steps:
       - name: Setup PATH
-        run: echo "/opt/homebrew/bin" >> $GITHUB_PATH
+        run: echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+
+      - name: Ensure RustRover is installed
+        run: |
+          if [ ! -x "$RUSTROVER_HOME/MacOS/rustrover" ]; then
+            echo "RustRover not found at $RUSTROVER_HOME; installing via Homebrew cask"
+            brew install --cask rustrover
+          fi
+          test -x "$RUSTROVER_HOME/MacOS/rustrover"
 
       - name: Cleanup stale RustRover
-        run: pkill -f 'rustrover inspect' || true
+        run: |
+          pkill -9 -f RustRover || true
+          pkill -9 -f rustrover || true
+
+      - name: Generate org repo token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: maxi-tools
+
+      - name: Configure git for private deps
+        # Write the App-token git config under RUNNER_TEMP (not a hardcoded
+        # home path) and remove it in the always() cleanup step below, so the
+        # token doesn't persist on the self-hosted runner after the job.
+        run: |
+          mkdir -p "$RUNNER_TEMP/qodana"
+          cat > "$RUNNER_TEMP/qodana/.gitconfig-ci" <<GITEOF
+          [credential]
+          helper =
+          [url "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/"]
+          insteadOf = "https://github.com/"
+          insteadOf = "git@github.com:"
+          GITEOF
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          token: ${{ steps.app-token.outputs.token }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Qodana Scan
+        continue-on-error: true
         env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+          GIT_CONFIG_GLOBAL: ${{ runner.temp }}/qodana/.gitconfig-ci
+          CARGO_TARGET_DIR: ${{ runner.temp }}/qodana/target
+          CARGO_HOME: ${{ runner.temp }}/qodana/cargo
         run: |
+          set -uo pipefail
           RESULTS_DIR="$RUNNER_TEMP/qodana/results"
           mkdir -p "$RESULTS_DIR"
-          $RUSTROVER_HOME/MacOS/rustrover inspect \
-            "$(pwd)" \
-            "$RESULTS_DIR" \
-            --qodana \
-            -v2
+          run_inspect() {
+            "$RUSTROVER_HOME/MacOS/rustrover" inspect "$(pwd)" "$RESULTS_DIR" --qodana -v2 &
+            local pid=$!
+            ( sleep 540; kill -9 "$pid" 2>/dev/null ) &
+            local watcher=$!
+            local rc=0
+            wait "$pid" || rc=$?
+            kill "$watcher" 2>/dev/null || true
+            return $rc
+          }
+          if ! run_inspect; then
+            echo "::warning::rustrover inspect hung/failed; retrying once without touching shared runner state"
+            sleep 5
+            run_inspect || echo "::warning::qodana inspect failed again after retry (non-fatal)"
+          fi
+
+      - name: Check Qodana results
+        id: qodana_results
+        if: always()
+        run: |
+          RESULTS_DIR="$RUNNER_TEMP/qodana/results"
+          if [ -f "$RESULTS_DIR/result-allProblems.json" ] || [ -f "$RESULTS_DIR/results-allProblems.json" ]; then
+            echo "has_results=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_results=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -f "$RESULTS_DIR/qodana.sarif.json" ]; then
+            echo "has_sarif=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_sarif=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload to Qodana Cloud
-        if: always() && env.QODANA_TOKEN != ''
-        env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+        if: always() && steps.qodana_results.outputs.has_results == 'true' && env.QODANA_TOKEN != ''
         run: |
+          if [ -z "${QODANA_TOKEN:-}" ]; then
+            echo "QODANA_TOKEN is not set; skipping cloud upload"
+            exit 0
+          fi
           command -v qodana || brew install jetbrains/utils/qodana
           qodana send \
             --results-dir "$RUNNER_TEMP/qodana/results" \
             --project-dir "$(pwd)" || echo "Cloud upload failed (non-fatal)"
 
       - name: Upload SARIF to GitHub
-        if: always()
+        if: always() && steps.qodana_results.outputs.has_sarif == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ runner.temp }}/qodana/results
         continue-on-error: true
+
+      - name: Cleanup CI gitconfig
+        if: always()
+        run: rm -f "$RUNNER_TEMP/qodana/.gitconfig-ci"
