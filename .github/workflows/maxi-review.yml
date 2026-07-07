@@ -133,25 +133,32 @@ jobs:
           if ! findings=$($to maxi-lint --format json pr-code 2>/dev/null) || [ -z "$findings" ]; then
             findings='[]'
           fi
-          changed=$(gh api --paginate \
+          pull_files_json="$(mktemp)"
+          pull_files_pages="$(mktemp)"
+          findings_json="$(mktemp)"
+          printf '%s' "$findings" > "$findings_json"
+          if ! gh api --paginate \
             "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-            --jq '.[] | select(.status != "removed") | .filename' 2>/dev/null || echo "")
+            > "$pull_files_pages" 2>/dev/null || \
+            ! jq -s 'add // [] | map(select(.status != "removed"))' "$pull_files_pages" > "$pull_files_json" 2>/dev/null; then
+            echo '[]' > "$pull_files_json"
+          fi
           # Inject only maxi-lint's own trusted text (rule + suggestion) plus a
           # control-char-stripped path/line. The PR-controlled matched snippet is
           # dropped and the path is sanitized so a crafted filename cannot break
           # out of this block into the authoritative extra_instructions channel.
-          # (The job already runs on same-repo PRs only — see the job `if`.)
-          block=$(printf '%s' "$findings" | jq -r --arg changed "$changed" '
-            ($changed | split("\n") | map(select(length > 0))) as $cf
-            | map((.file | sub("^pr-code/"; "")) as $rel0
-                  | select($cf | index($rel0))
-                  | ($rel0 | gsub("[\\u0000-\\u001f]"; "")) as $rel
-                  | "- \($rel):\(.line) [\(.rule)] \(.suggestion)")
-            | unique | .[]' 2>/dev/null || echo "")
+          # Findings are filtered to changed PR lines from GitHub patch hunks, not
+          # merely changed files. (The job already runs on same-repo PRs only —
+          # see the job `if`.)
+          block=""
+          if command -v python3 >/dev/null 2>&1; then
+            block="$(python3 .maxi-config/maxi-review/filter-maxi-lint-findings.py "$findings_json" "$pull_files_json" 2>/dev/null || true)"
+          fi
+          rm -f "$findings_json" "$pull_files_json" "$pull_files_pages"
           {
             echo "text<<MAXI_LINT_EOF"
             if [ -n "$block" ]; then
-              printf '## maxi-lint findings (advisory)\n\nDeterministic maxi-convention violations in files changed by this PR (may include pre-existing violations on unchanged lines). Advisory context only — not blocking.\n\n%s\n' "$block"
+              printf '## maxi-lint findings (advisory)\n\nDeterministic maxi-convention violations on lines changed by this PR. Advisory context only — not blocking.\n\n%s\n' "$block"
             fi
             echo "MAXI_LINT_EOF"
           } >> "$GITHUB_OUTPUT"
