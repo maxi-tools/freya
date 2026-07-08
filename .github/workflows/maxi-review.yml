@@ -1,14 +1,13 @@
 # maxi-config-owned Maxi PR review workflow.
 #
 # Drop this into a repo's .github/workflows/. It:
-#   1. lists the PR's changed files,
-#   2. selects per-language rules (common + each language present) from the
-#      central maxi-review/jules-rules in maxi-config,
-#   3. feeds the resulting ruleset to the maxi-reviewer action, whose
-#      prompt (maxi-review/prompt.ts) places it up-front and demands JSON-only output.
+#   1. runs deterministic maxi-lint on changed files in lint-gate,
+#   2. selects per-language Jules rules from central maxi-config,
+#   3. feeds both the ruleset and lint findings to maxi-reviewer.
 #
-# The prompt + review-repair behavior live in maxi-tools/maxi-reviewer.
-# To ship prompt changes, update that repo and move its v1 tag (see FORK.md).
+# The deterministic lint and AI review failure modes intentionally stay separate:
+# lint-gate can be required as a fast merge gate, while review remains an
+# advisory/commenting lane unless a repo explicitly requires its context.
 name: Maxi Review
 on:
   pull_request:
@@ -19,19 +18,153 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  review:
-    # Only run on same-repository PRs. In degraded economy mode this paid review
-    # lane is opt-in via the run-maxi-review label; strict mode restores automatic
-    # blocking review on normal PR events.
+  lint-gate:
+    # Same-repository only: this job uses org app credentials to install the
+    # private maxi-lint scanner. It checks changed files only and fails solely
+    # on deny-level deterministic findings.
     if: >
       github.event.pull_request.head.repo.full_name == github.repository &&
       (
         vars.CI_ENFORCEMENT_MODE == 'strict' ||
         contains(github.event.pull_request.labels.*.name, 'run-maxi-review')
       )
-    # Portable macOS lane: review work needs gh/jq plus a macOS shell for the
-    # existing maxi-lint advisory path, but it should not queue behind the scarce
-    # self-hosted macOS pool during degraded CI economy rollout.
+    runs-on: warp-macos-15-arm64-6x
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Create Maxi Review app token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.MAXI_REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MAXI_REVIEW_APP_PRIVATE_KEY }}
+          owner: maxi-tools
+          repositories: |
+            maxi-config
+            maxi-lint
+            ${{ github.event.repository.name }}
+          permission-contents: read
+          permission-pull-requests: read
+
+      - name: Checkout PR head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr-code
+          persist-credentials: false
+
+      - name: Fetch maxi-review helper
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: maxi-tools/maxi-config
+          path: .maxi-config
+          sparse-checkout: maxi-review
+          persist-credentials: false
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Run maxi-lint deny gate
+        id: maxilint
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+          if ! command -v maxi-lint >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then
+            CARGO_NET_GIT_FETCH_WITH_CLI=true \
+              cargo install --git https://github.com/maxi-tools/maxi-lint.git maxi-lint --quiet
+          fi
+          if ! command -v maxi-lint >/dev/null 2>&1; then
+            echo "maxi-lint unavailable; no deterministic findings collected" > maxi-lint-findings.md
+            printf '[]\n' > maxi-lint-findings.json
+            exit 0
+          fi
+
+          to=""
+          if command -v timeout >/dev/null 2>&1; then to="timeout 120"
+          elif command -v gtimeout >/dev/null 2>&1; then to="gtimeout 120"; fi
+          if ! findings=$($to maxi-lint --format json pr-code 2>/dev/null) || [ -z "$findings" ]; then
+            findings='[]'
+          fi
+          printf '%s\n' "$findings" > all-findings.json
+          gh api --paginate \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" > pull-files-pages.json
+          jq -s 'add | map(select(.status != "removed"))' pull-files-pages.json > pull-files.json
+          python3 .maxi-config/maxi-review/filter-maxi-lint-findings.py \
+            all-findings.json pull-files.json > filtered-findings.md
+          gh api --paginate \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --jq '.[] | select(.status != "removed") | .filename' > changed-files.txt
+          python3 - all-findings.json changed-files.txt filtered-findings.md maxi-lint-findings.json maxi-lint-findings.md <<'PY'
+          import json, sys
+
+          raw = json.load(open(sys.argv[1]))
+          changed = {line.strip() for line in open(sys.argv[2]) if line.strip()}
+          markdown = open(sys.argv[3]).read()
+
+          def path_of(finding):
+              return (
+                  finding.get("path")
+                  or finding.get("file")
+                  or finding.get("filename")
+                  or ""
+              ).removeprefix("pr-code/")
+
+          def level_of(finding):
+              return str(
+                  finding.get("level")
+                  or finding.get("severity")
+                  or finding.get("decision")
+                  or finding.get("kind")
+                  or ""
+              ).lower()
+
+          scoped = []
+          deny = []
+          for finding in raw:
+              path = path_of(finding)
+              if path and path not in changed:
+                  continue
+              scoped.append(finding)
+              if level_of(finding) in {"deny", "error", "blocking", "fail"}:
+                  deny.append(finding)
+
+          json.dump(scoped, open(sys.argv[4], "w"), indent=2)
+          with open(sys.argv[5], "w") as out:
+              if markdown.strip():
+                  out.write("## maxi-lint findings\n\n")
+                  out.write("Deterministic findings on files changed by this PR.\n\n")
+                  out.write(markdown)
+                  if not markdown.endswith("\n"):
+                      out.write("\n")
+
+          if deny:
+              print(f"maxi-lint found {len(deny)} deny-level finding(s)")
+              sys.exit(1)
+          PY
+
+      - name: Upload maxi-lint findings
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: maxi-lint-findings
+          path: |
+            maxi-lint-findings.json
+            maxi-lint-findings.md
+          if-no-files-found: error
+
+  review:
+    needs: lint-gate
+    if: >
+      always() &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (
+        vars.CI_ENFORCEMENT_MODE == 'strict' ||
+        contains(github.event.pull_request.labels.*.name, 'run-maxi-review')
+      )
+    continue-on-error: true
     runs-on: warp-macos-15-arm64-6x
     timeout-minutes: 40
     permissions:
@@ -55,7 +188,12 @@ jobs:
           permission-pull-requests: write
           permission-statuses: write
 
-      # Central rules + selector live in maxi-config (sparse checkout).
+      - name: Download maxi-lint findings
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: maxi-lint-findings
+          path: .maxi-lint-findings
+
       - name: Fetch maxi-review rules
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -82,90 +220,24 @@ jobs:
             echo "JULES_RULES_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # Check out the PR head so the advisory maxi-lint pass has code to scan.
-      # Same-repo only (guarded by the job `if`), and maxi-lint only reads files
-      # (no execution), so this does not run untrusted code.
-      - name: Checkout PR head for maxi-lint
+      - name: Prepare lint findings context
+        id: maxilint
+        run: |
+          {
+            echo "text<<MAXI_LINT_EOF"
+            if [ -s .maxi-lint-findings/maxi-lint-findings.md ]; then
+              cat .maxi-lint-findings/maxi-lint-findings.md
+            fi
+            echo "MAXI_LINT_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout PR head
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: pr-code
           persist-credentials: false
 
-      # Fold the maxi-lint pass into the review: run it, scope findings to the
-      # PR's changed files, and emit a Markdown block that the next step appends
-      # to extra_instructions (which our patched prompt injects up-front).
-      # Advisory only — `continue-on-error` plus PATH-gating mean it never
-      # blocks or fails the review, and non-Rust repos / runners without
-      # maxi-lint simply produce no block. Runners are expected to have
-      # maxi-lint on PATH (or ~/.cargo/bin); see maxi-tools/maxi-lint.
-      - name: Run maxi-lint (advisory)
-        id: maxilint
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
-          # Self-heal: if maxi-lint isn't already on the runner, build+install it
-          # from source via the runner's SSH credentials. maxi-lint has only
-          # crates.io deps (no private git deps), so this is a ~1-minute cold
-          # build that then lives in ~/.cargo/bin — subsequent runs on this
-          # runner hit the PATH check above and skip straight past. Best-effort:
-          # if cargo/SSH is unavailable the advisory pass cleanly no-ops below.
-          if ! command -v maxi-lint >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then
-            CARGO_NET_GIT_FETCH_WITH_CLI=true \
-              cargo install --git ssh://git@github.com/maxi-tools/maxi-lint maxi-lint --quiet 2>/dev/null || true
-          fi
-          if ! command -v maxi-lint >/dev/null 2>&1; then
-            echo "maxi-lint unavailable; skipping advisory lint pass"
-            printf 'text<<MAXI_LINT_EOF\nMAXI_LINT_EOF\n' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Bounded so a slow/pathological scan can't consume the job's review
-          # budget (continue-on-error only applies after the process exits).
-          # Capture cleanly: `findings=$(cmd || echo [])` would concatenate any
-          # partial stdout with the fallback and yield invalid JSON, so test the
-          # exit status explicitly and fall back to an empty array.
-          # `timeout` isn't on macOS by default; use it (or gtimeout) if present.
-          to=""
-          if command -v timeout >/dev/null 2>&1; then to="timeout 120"
-          elif command -v gtimeout >/dev/null 2>&1; then to="gtimeout 120"; fi
-          if ! findings=$($to maxi-lint --format json pr-code 2>/dev/null) || [ -z "$findings" ]; then
-            findings='[]'
-          fi
-          pull_files_json="$(mktemp)"
-          pull_files_pages="$(mktemp)"
-          findings_json="$(mktemp)"
-          printf '%s' "$findings" > "$findings_json"
-          if ! gh api --paginate \
-            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-            > "$pull_files_pages" 2>/dev/null || \
-            ! jq -s 'add // [] | map(select(.status != "removed"))' "$pull_files_pages" > "$pull_files_json" 2>/dev/null; then
-            echo '[]' > "$pull_files_json"
-          fi
-          # Inject only maxi-lint's own trusted text (rule + suggestion) plus a
-          # control-char-stripped path/line. The PR-controlled matched snippet is
-          # dropped and the path is sanitized so a crafted filename cannot break
-          # out of this block into the authoritative extra_instructions channel.
-          # Findings are filtered to changed PR lines from GitHub patch hunks, not
-          # merely changed files. (The job already runs on same-repo PRs only —
-          # see the job `if`.)
-          block=""
-          if command -v python3 >/dev/null 2>&1; then
-            block="$(python3 .maxi-config/maxi-review/filter-maxi-lint-findings.py "$findings_json" "$pull_files_json" 2>/dev/null || true)"
-          fi
-          rm -f "$findings_json" "$pull_files_json" "$pull_files_pages"
-          {
-            echo "text<<MAXI_LINT_EOF"
-            if [ -n "$block" ]; then
-              printf '## maxi-lint findings (advisory)\n\nDeterministic maxi-convention violations on lines changed by this PR. Advisory context only — not blocking.\n\n%s\n' "$block"
-            fi
-            echo "MAXI_LINT_EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      # maxi-reviewer selects built-in rules (for example rules/github-actions.md)
-      # relative to the workspace when matching changed files. Stage those rules
-      # explicitly so dynamic extra_instructions can coexist with built-ins.
       - name: Generate reviewer repo token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: reviewer-token
@@ -195,14 +267,10 @@ jobs:
             cp pr-code/.github/jules-review-rules.md rules/rust.md
           fi
 
-      # The prompt + review-repair behavior live in maxi-tools/maxi-reviewer (maxi-review/prompt.ts).
-      # Pin to the rebuilt action bundle so artifact upload works under Node 24.
       - uses: maxi-tools/maxi-reviewer@0203710714a9d3f0f5d5d5757400712201116bf3
         with:
           jules_api_key: ${{ secrets.JULES_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
-          # Dynamic, per-language ruleset (selected above) instead of a static file.
-          # Our patched prompt treats extra_instructions as authoritative, up-front.
           rules_file: ""
           extra_instructions: |
             ${{ steps.rules.outputs.text }}
@@ -210,11 +278,5 @@ jobs:
             ${{ steps.maxilint.outputs.text }}
           timeout_minutes: "30"
           fail_on: "blocking"
-          # Keep the required commit-status context stable (maxi-reviewer@v1
-          # defaults to maxi/review) so existing jules/review branch protection
-          # still passes across the synced fleet.
           status_context: jules/review
-          # maxi-reviewer defaults analyzer_mode to auto and would run opengrep/pmd
-          # against the checked-out workspace (pr-code/.maxi-config), producing
-          # findings whose paths do not match the PR diff. Disable to avoid noise.
           analyzer_mode: "off"
