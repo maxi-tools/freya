@@ -1,0 +1,32 @@
+# Thin standard Rust CI wrapper for maxi-tools repos.
+# Source of truth: maxi-config/workflows/rust-ci.yml
+# Copy to .github/workflows/ci.yml in simple Rust repos that can use the
+# canonical lane policy without repo-local CI customization.
+
+name: CI
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
+
+on:
+  push:
+    branches: [main, release/**]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  merge-gate:
+    uses: maxi-tools/maxi-config/.github/workflows/rust-ci.yml@main
+    permissions:
+      contents: write
+      pull-requests: read
+      actions: read
+      id-token: write
+      pages: write
+    with:
+      repo_policy: standard-rust
+    secrets: inherit
