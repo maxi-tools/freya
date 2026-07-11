@@ -26,10 +26,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           pr=$(gh api "${{ github.event.issue.pull_request.url }}")
-          echo "head_repo=$(printf '%s' "$pr" | jq -r '.head.repo.full_name')" >> "$GITHUB_OUTPUT"
-          echo "head_ref=$(printf '%s' "$pr" | jq -r '.head.ref')" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$(printf '%s' "$pr" | jq -r '.head.sha')" >> "$GITHUB_OUTPUT"
-          echo "title=$(printf '%s' "$pr" | jq -r '.title')" >> "$GITHUB_OUTPUT"
+          {
+            echo "head_repo=$(printf '%s' "$pr" | jq -r '.head.repo.full_name')"
+            echo "head_ref=$(printf '%s' "$pr" | jq -r '.head.ref')"
+            echo "head_sha=$(printf '%s' "$pr" | jq -r '.head.sha')"
+            echo "title=$(printf '%s' "$pr" | jq -r '.title')"
+          } >> "$GITHUB_OUTPUT"
           {
             echo "body<<JULES_PR_BODY_EOF"
             printf '%s\n' "$pr" | jq -r '.body // ""'
