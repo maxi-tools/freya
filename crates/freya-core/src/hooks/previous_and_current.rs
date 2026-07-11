@@ -1,11 +1,6 @@
 use std::mem;
 
-use crate::prelude::{
-    IntoReadable,
-    State,
-    use_side_effect,
-    use_state,
-};
+use crate::prelude::{IntoReadable, State, use_side_effect, use_state};
 
 /// Track the previous and current values of a reactive value.
 ///

@@ -1,15 +1,9 @@
-use std::sync::{
-    Arc,
-    Mutex,
-};
+use std::sync::{Arc, Mutex};
 
 use freya_core::prelude::try_consume_root_context;
 use torin::prelude::Area;
 
-use crate::registry::{
-    WebViewConfig,
-    WebViewId,
-};
+use crate::registry::{WebViewConfig, WebViewId};
 
 #[derive(Debug, Clone)]
 pub enum WebViewLifecycleEvent {

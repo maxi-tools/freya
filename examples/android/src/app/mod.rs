@@ -1,11 +1,7 @@
 mod routes;
 
 use freya::{
-    animation::*,
-    icons::lucide,
-    material_design::FloatingTabRippleExt,
-    prelude::*,
-    router::*,
+    animation::*, icons::lucide, material_design::FloatingTabRippleExt, prelude::*, router::*,
 };
 use routes::*;
 

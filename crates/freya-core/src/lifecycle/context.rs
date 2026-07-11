@@ -1,13 +1,6 @@
-use std::{
-    any::TypeId,
-    rc::Rc,
-};
+use std::{any::TypeId, rc::Rc};
 
-use crate::{
-    current_context::CurrentContext,
-    prelude::use_hook,
-    scope_id::ScopeId,
-};
+use crate::{current_context::CurrentContext, prelude::use_hook, scope_id::ScopeId};
 
 pub fn provide_context<T: Clone + 'static>(value: T) {
     provide_context_for_scope_id(value, None)

@@ -1,21 +1,14 @@
 //! Types pertaining to navigation.
 
 use std::{
-    fmt::{
-        Debug,
-        Display,
-    },
+    fmt::{Debug, Display},
     str::FromStr,
 };
 
-use url::{
-    ParseError,
-    Url,
-};
+use url::{ParseError, Url};
 
 use crate::{
-    components::child_router::consume_child_route_mapping,
-    prelude::RouterContext,
+    components::child_router::consume_child_route_mapping, prelude::RouterContext,
     routable::Routable,
 };
 

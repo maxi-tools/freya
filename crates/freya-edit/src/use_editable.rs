@@ -3,12 +3,8 @@ use std::time::Duration;
 use freya_core::prelude::*;
 
 use crate::{
-    EditableConfig,
-    EditableEvent,
-    TextDragging,
-    editor_history::EditorHistory,
-    rope_editor::RopeEditor,
-    text_editor::TextSelection,
+    EditableConfig, EditableEvent, TextDragging, editor_history::EditorHistory,
+    rope_editor::RopeEditor, text_editor::TextSelection,
 };
 
 /// Manage an editable text.

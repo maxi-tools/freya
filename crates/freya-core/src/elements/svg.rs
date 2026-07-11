@@ -1,54 +1,20 @@
 //! Use [svg()] to render SVG in your app.
 
-use std::{
-    any::Any,
-    borrow::Cow,
-    cell::RefCell,
-    collections::HashMap,
-    rc::Rc,
-};
+use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 
 use bytes::Bytes;
-use freya_engine::prelude::{
-    ClipOp,
-    LocalResourceProvider,
-    Paint,
-    SkRect,
-    svg,
-};
+use freya_engine::prelude::{ClipOp, LocalResourceProvider, Paint, SkRect, svg};
 use rustc_hash::FxHashMap;
-use torin::{
-    prelude::Size2D,
-    size::Size,
-};
+use torin::{prelude::Size2D, size::Size};
 
 use crate::{
-    data::{
-        AccessibilityData,
-        EffectData,
-        LayoutData,
-        StyleState,
-        TextStyleData,
-    },
+    data::{AccessibilityData, EffectData, LayoutData, StyleState, TextStyleData},
     diff_key::DiffKey,
-    element::{
-        ClipContext,
-        Element,
-        ElementExt,
-        EventHandlerType,
-        LayoutContext,
-        RenderContext,
-    },
+    element::{ClipContext, Element, ElementExt, EventHandlerType, LayoutContext, RenderContext},
     events::name::EventName,
     layers::Layer,
     prelude::{
-        AccessibilityExt,
-        Color,
-        ContainerExt,
-        EventHandlersExt,
-        KeyExt,
-        LayerExt,
-        LayoutExt,
+        AccessibilityExt, Color, ContainerExt, EventHandlersExt, KeyExt, LayerExt, LayoutExt,
         MaybeExt,
     },
     tree::DiffModifies,

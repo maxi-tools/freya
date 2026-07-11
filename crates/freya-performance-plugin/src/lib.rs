@@ -1,40 +1,17 @@
 use std::{
     collections::HashMap,
-    time::{
-        Duration,
-        Instant,
-    },
+    time::{Duration, Instant},
 };
 
 use freya_core::prelude::UserEvent;
 use freya_engine::prelude::{
-    Color,
-    FontStyle,
-    Paint,
-    PaintStyle,
-    ParagraphBuilder,
-    ParagraphStyle,
-    Rect,
-    Slant,
-    TextShadow,
-    TextStyle,
-    Weight,
-    Width,
+    Color, FontStyle, Paint, PaintStyle, ParagraphBuilder, ParagraphStyle, Rect, Slant, TextShadow,
+    TextStyle, Weight, Width,
 };
 use freya_winit::{
-    plugins::{
-        FreyaPlugin,
-        Key,
-        Modifiers,
-        PluginEvent,
-        PluginHandle,
-    },
+    plugins::{FreyaPlugin, Key, Modifiers, PluginEvent, PluginHandle},
     reexports::winit::window::WindowId,
-    renderer::{
-        NativeEvent,
-        NativeWindowEvent,
-        NativeWindowEventAction,
-    },
+    renderer::{NativeEvent, NativeWindowEvent, NativeWindowEventAction},
 };
 
 /// Performance overlay plugin that displays FPS, timing metrics, and other

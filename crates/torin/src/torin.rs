@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    mem,
-};
+use std::{collections::HashMap, mem};
 
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
@@ -9,22 +6,9 @@ use rustc_hash::FxHashMap;
 use crate::{
     custom_measurer::LayoutMeasurer,
     geometry::Area,
-    measure::{
-        MeasureContext,
-        Phase,
-    },
-    prelude::{
-        AreaConverter,
-        AreaModel,
-        Gaps,
-        Length,
-        Size2D,
-    },
-    tree_adapter::{
-        LayoutNode,
-        NodeKey,
-        TreeAdapter,
-    },
+    measure::{MeasureContext, Phase},
+    prelude::{AreaConverter, AreaModel, Gaps, Length, Size2D},
+    tree_adapter::{LayoutNode, NodeKey, TreeAdapter},
 };
 
 pub struct LayoutMetadata {

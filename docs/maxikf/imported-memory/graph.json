@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    {
+      "id": "memories/agents",
+      "glyph": "🧠",
+      "title": "AGENTS.md",
+      "typ": "memory"
+    }
+  ],
+  "edges": []
+}

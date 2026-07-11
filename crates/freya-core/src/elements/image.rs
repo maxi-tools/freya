@@ -1,58 +1,23 @@
 //! [image()] makes it possible to render a Skia image into the canvas.
 
-use std::{
-    any::Any,
-    borrow::Cow,
-    cell::RefCell,
-    collections::HashMap,
-    rc::Rc,
-};
+use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 
 use bytes::Bytes;
 use freya_engine::prelude::{
-    ClipOp,
-    CubicResampler,
-    FilterMode,
-    MipmapMode,
-    Paint,
-    SamplingOptions,
-    SkImage,
-    SkRect,
+    ClipOp, CubicResampler, FilterMode, MipmapMode, Paint, SamplingOptions, SkImage, SkRect,
 };
 use rustc_hash::FxHashMap;
 use torin::prelude::Size2D;
 
 use crate::{
-    data::{
-        AccessibilityData,
-        EffectData,
-        LayoutData,
-        StyleState,
-        TextStyleData,
-    },
+    data::{AccessibilityData, EffectData, LayoutData, StyleState, TextStyleData},
     diff_key::DiffKey,
-    element::{
-        ClipContext,
-        Element,
-        ElementExt,
-        EventHandlerType,
-        LayoutContext,
-        RenderContext,
-    },
+    element::{ClipContext, Element, ElementExt, EventHandlerType, LayoutContext, RenderContext},
     events::name::EventName,
     layers::Layer,
     prelude::{
-        AccessibilityExt,
-        ChildrenExt,
-        ContainerExt,
-        ContainerWithContentExt,
-        EffectExt,
-        EventHandlersExt,
-        ImageExt,
-        KeyExt,
-        LayerExt,
-        LayoutExt,
-        MaybeExt,
+        AccessibilityExt, ChildrenExt, ContainerExt, ContainerWithContentExt, EffectExt,
+        EventHandlersExt, ImageExt, KeyExt, LayerExt, LayoutExt, MaybeExt,
     },
     style::corner_radius::CornerRadius,
     tree::DiffModifies,

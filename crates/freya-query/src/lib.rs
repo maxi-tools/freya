@@ -199,9 +199,5 @@ pub mod mutation;
 pub mod query;
 
 pub mod prelude {
-    pub use crate::{
-        captured::*,
-        mutation::*,
-        query::*,
-    };
+    pub use crate::{captured::*, mutation::*, query::*};
 }

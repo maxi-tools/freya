@@ -1,10 +1,7 @@
 use freya_core::prelude::*;
 #[cfg(feature = "titlebar")]
 use torin::prelude::Length;
-use torin::{
-    gaps::Gaps,
-    size::Size,
-};
+use torin::{gaps::Gaps, size::Size};
 
 #[cfg(feature = "calendar")]
 use crate::calendar::CalendarThemePreference;
@@ -16,49 +13,28 @@ use crate::markdown::MarkdownViewerThemePreference;
 use crate::titlebar::TitlebarButtonThemePreference;
 use crate::{
     accordion::AccordionThemePreference,
-    button::{
-        ButtonColorsThemePreference,
-        ButtonLayoutThemePreference,
-    },
-    card::{
-        CardColorsThemePreference,
-        CardLayoutThemePreference,
-    },
+    button::{ButtonColorsThemePreference, ButtonLayoutThemePreference},
+    card::{CardColorsThemePreference, CardLayoutThemePreference},
     checkbox::CheckboxThemePreference,
     chip::ChipThemePreference,
     color_picker::ColorPickerThemePreference,
     floating_tab::FloatingTabThemePreference,
-    input::{
-        InputColorsThemePreference,
-        InputLayoutThemePreference,
-    },
+    input::{InputColorsThemePreference, InputLayoutThemePreference},
     loader::CircularLoaderThemePreference,
-    menu::{
-        MenuContainerThemePreference,
-        MenuItemThemePreference,
-    },
+    menu::{MenuContainerThemePreference, MenuItemThemePreference},
     popup::PopupThemePreference,
     progressbar::ProgressBarThemePreference,
     radio_item::RadioItemThemePreference,
     resizable_container::ResizableHandleThemePreference,
     scrollviews::ScrollBarThemePreference,
-    segmented_button::{
-        ButtonSegmentThemePreference,
-        SegmentedButtonThemePreference,
-    },
+    segmented_button::{ButtonSegmentThemePreference, SegmentedButtonThemePreference},
     select::SelectThemePreference,
     sidebar::SideBarItemThemePreference,
     slider::SliderThemePreference,
-    switch::{
-        SwitchColorsThemePreference,
-        SwitchLayoutThemePreference,
-    },
+    switch::{SwitchColorsThemePreference, SwitchLayoutThemePreference},
     table::TableThemePreference,
     theming::{
-        component_themes::{
-            ColorsSheet,
-            Theme,
-        },
+        component_themes::{ColorsSheet, Theme},
         macros::Preference,
     },
     tooltip::TooltipThemePreference,

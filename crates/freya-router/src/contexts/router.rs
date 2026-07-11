@@ -1,21 +1,10 @@
-use std::{
-    cell::RefCell,
-    error::Error,
-    fmt::Display,
-    rc::Rc,
-};
+use std::{cell::RefCell, error::Error, fmt::Display, rc::Rc};
 
-use freya_core::{
-    integration::FxHashSet,
-    prelude::*,
-};
+use freya_core::{integration::FxHashSet, prelude::*};
 
 use crate::{
-    components::child_router::consume_child_route_mapping,
-    memory::MemoryHistory,
-    navigation::NavigationTarget,
-    prelude::SiteMapSegment,
-    routable::Routable,
+    components::child_router::consume_child_route_mapping, memory::MemoryHistory,
+    navigation::NavigationTarget, prelude::SiteMapSegment, routable::Routable,
     router_cfg::RouterConfig,
 };
 

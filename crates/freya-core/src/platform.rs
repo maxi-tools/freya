@@ -4,10 +4,7 @@ use torin::prelude::Size2D;
 
 use crate::{
     accessibility::id::AccessibilityId,
-    prelude::{
-        State,
-        consume_root_context,
-    },
+    prelude::{State, consume_root_context},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Hash)]

@@ -1,12 +1,6 @@
-use freya_core::lifecycle::writable::{
-    IntoWritable,
-    Writable,
-};
+use freya_core::lifecycle::writable::{IntoWritable, Writable};
 
-use crate::{
-    hooks::RadioChannel,
-    slice::RadioSliceMut,
-};
+use crate::{hooks::RadioChannel, slice::RadioSliceMut};
 
 pub trait RadioWritable<T: 'static> {
     fn from_slice<Value, Channel>(slice: RadioSliceMut<Value, T, Channel>) -> Self

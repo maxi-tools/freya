@@ -1,9 +1,6 @@
 use std::{
     cell::RefCell,
-    hash::{
-        Hash,
-        Hasher,
-    },
+    hash::{Hash, Hasher},
     rc::Rc,
 };
 
@@ -11,12 +8,7 @@ use futures_channel::mpsc::UnboundedSender;
 use generational_box::GenerationalBox;
 use rustc_hash::FxHashSet;
 
-use crate::{
-    current_context::CurrentContext,
-    notify::Notify,
-    runner::Message,
-    scope_id::ScopeId,
-};
+use crate::{current_context::CurrentContext, notify::Notify, runner::Message, scope_id::ScopeId};
 
 pub(crate) struct Inner {
     self_rc: Option<ReactiveContext>,

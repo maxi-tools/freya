@@ -1,21 +1,10 @@
 #![allow(dead_code)]
 
-use std::collections::{
-    HashMap,
-    HashSet,
-};
+use std::collections::{HashMap, HashSet};
 
 use ragnarok::{
-    Area,
-    CursorPoint,
-    EmmitableEvent,
-    EventsExecutor,
-    EventsExecutorRunner,
-    EventsMeasurer,
-    EventsMeasurerRunner,
-    NameOfEvent,
-    NodesState,
-    SourceEvent,
+    Area, CursorPoint, EmmitableEvent, EventsExecutor, EventsExecutorRunner, EventsMeasurer,
+    EventsMeasurerRunner, NameOfEvent, NodesState, SourceEvent,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]

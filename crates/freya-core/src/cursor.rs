@@ -1,9 +1,6 @@
 use cursor_icon::CursorIcon;
 
-use crate::{
-    platform::Platform,
-    user_event::UserEvent,
-};
+use crate::{platform::Platform, user_event::UserEvent};
 
 pub struct Cursor;
 

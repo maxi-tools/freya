@@ -1,15 +1,9 @@
 use std::{
-    hash::{
-        Hash,
-        Hasher,
-    },
+    hash::{Hash, Hasher},
     rc::Rc,
 };
 
-use rustc_hash::{
-    FxHashMap,
-    FxHasher,
-};
+use rustc_hash::{FxHashMap, FxHasher};
 use smallvec::SmallVec;
 
 pub struct LRUCache<V, ID: Hash> {

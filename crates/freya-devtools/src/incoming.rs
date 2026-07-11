@@ -1,8 +1,5 @@
 use freya_core::integration::NodeId;
-use serde::{
-    Deserialize,
-    Serialize,
-};
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct IncomingMessage {

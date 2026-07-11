@@ -3,19 +3,10 @@
     windows_subsystem = "windows"
 )]
 
-use std::time::{
-    Duration,
-    UNIX_EPOCH,
-};
+use std::time::{Duration, UNIX_EPOCH};
 
-use freya::{
-    prelude::*,
-    query::*,
-};
-use serde::{
-    Deserialize,
-    Serialize,
-};
+use freya::{prelude::*, query::*};
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Story {

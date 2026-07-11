@@ -1,9 +1,5 @@
 #[cfg(target_os = "android")]
-use freya::prelude::{
-    LaunchConfig,
-    WindowConfig,
-    launch,
-};
+use freya::prelude::{LaunchConfig, WindowConfig, launch};
 #[cfg(target_os = "android")]
 use winit::platform::android::activity::AndroidApp;
 
@@ -15,10 +11,7 @@ mod app;
 fn android_main(droid_app: AndroidApp) {
     use freya::android::AndroidPlugin;
     use freya_winit::renderer::NativeEvent;
-    use winit::{
-        event_loop::EventLoop,
-        platform::android::EventLoopBuilderExtAndroid,
-    };
+    use winit::{event_loop::EventLoop, platform::android::EventLoopBuilderExtAndroid};
 
     android_logger::init_once(
         android_logger::Config::default().with_max_level(log::LevelFilter::Debug),

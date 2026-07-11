@@ -2,10 +2,7 @@ use freya::prelude::*;
 use freya_core::integration::NodeId;
 use freya_devtools::NodeStateAttributes;
 
-use crate::{
-    components::attribute::attributes_list,
-    hooks::use_node_info,
-};
+use crate::{components::attribute::attributes_list, hooks::use_node_info};
 
 #[derive(PartialEq)]
 pub struct NodeInspectorStyle {

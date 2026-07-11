@@ -1,12 +1,6 @@
-use std::{
-    any::Any,
-    fmt,
-};
+use std::{any::Any, fmt};
 
-use freya_core::{
-    integration::FxHashMap,
-    prelude::*,
-};
+use freya_core::{integration::FxHashMap, prelude::*};
 
 use crate::theming::themes::light_theme;
 

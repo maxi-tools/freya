@@ -3,29 +3,15 @@
 use std::collections::HashMap;
 
 use freya_winit::{
-    plugins::{
-        FreyaPlugin,
-        PluginEvent,
-        PluginHandle,
-    },
+    plugins::{FreyaPlugin, PluginEvent, PluginHandle},
     winit::window::Window,
 };
 use torin::prelude::Area;
-use wry::{
-    Rect,
-    WebView as WryWebView,
-    WebViewBuilder,
-};
+use wry::{Rect, WebView as WryWebView, WebViewBuilder};
 
 use crate::{
-    lifecycle::{
-        WebViewEvents,
-        WebViewLifecycleEvent,
-    },
-    registry::{
-        WebViewConfig,
-        WebViewId,
-    },
+    lifecycle::{WebViewEvents, WebViewLifecycleEvent},
+    registry::{WebViewConfig, WebViewId},
 };
 
 /// State for a managed WebView.

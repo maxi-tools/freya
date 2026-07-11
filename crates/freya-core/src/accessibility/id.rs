@@ -1,15 +1,9 @@
 use std::sync::{
     Arc,
-    atomic::{
-        AtomicU64,
-        Ordering,
-    },
+    atomic::{AtomicU64, Ordering},
 };
 
-pub use accesskit::{
-    NodeId as AccessibilityId,
-    Role as AccessibilityRole,
-};
+pub use accesskit::{NodeId as AccessibilityId, Role as AccessibilityRole};
 
 #[derive(Clone)]
 pub struct AccessibilityGenerator {

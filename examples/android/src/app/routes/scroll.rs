@@ -1,7 +1,4 @@
-use freya::{
-    animation::*,
-    prelude::*,
-};
+use freya::{animation::*, prelude::*};
 
 #[derive(PartialEq)]
 pub struct ScrollViewDemo;

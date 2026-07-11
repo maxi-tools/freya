@@ -1,10 +1,6 @@
 use std::time::Duration;
 
-use freya::{
-    animation::*,
-    material_design::Ripple,
-    prelude::*,
-};
+use freya::{animation::*, material_design::Ripple, prelude::*};
 
 #[derive(PartialEq)]
 pub struct PortalDemo;

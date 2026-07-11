@@ -1,12 +1,7 @@
 //! # Routable
 
 #![allow(non_snake_case)]
-use std::{
-    fmt::Display,
-    iter::FlatMap,
-    slice::Iter,
-    str::FromStr,
-};
+use std::{fmt::Display, iter::FlatMap, slice::Iter, str::FromStr};
 
 use freya_core::integration::Element;
 

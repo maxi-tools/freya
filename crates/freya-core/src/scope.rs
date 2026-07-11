@@ -1,26 +1,15 @@
 use std::{
-    any::{
-        Any,
-        TypeId,
-    },
+    any::{Any, TypeId},
     rc::Rc,
 };
 
-use generational_box::{
-    AnyStorage,
-    GenerationalBox,
-    Owner,
-    UnsyncStorage,
-};
+use generational_box::{AnyStorage, GenerationalBox, Owner, UnsyncStorage};
 use pathgraph::PathGraph;
 use rustc_hash::FxHashMap;
 
 use crate::{
     diff_key::DiffKey,
-    element::{
-        ComponentProps,
-        Element,
-    },
+    element::{ComponentProps, Element},
     node_id::NodeId,
     path_element::PathElement,
     reactive_context::ReactiveContext,

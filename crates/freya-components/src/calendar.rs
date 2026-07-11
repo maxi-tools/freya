@@ -5,28 +5,13 @@ pub enum WeekStart {
     Monday,
 }
 
-use chrono::{
-    Datelike,
-    Local,
-    Month,
-    NaiveDate,
-};
+use chrono::{Datelike, Local, Month, NaiveDate};
 use freya_core::prelude::*;
-use torin::{
-    content::Content,
-    gaps::Gaps,
-    prelude::Alignment,
-    size::Size,
-};
+use torin::{content::Content, gaps::Gaps, prelude::Alignment, size::Size};
 
 use crate::{
-    button::{
-        Button,
-        ButtonColorsThemePartialExt,
-        ButtonLayoutThemePartialExt,
-    },
-    define_theme,
-    get_theme,
+    button::{Button, ButtonColorsThemePartialExt, ButtonLayoutThemePartialExt},
+    define_theme, get_theme,
     icons::arrow::ArrowIcon,
 };
 

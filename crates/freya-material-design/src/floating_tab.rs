@@ -1,10 +1,7 @@
 use std::time::Duration;
 
 use freya_components::{
-    floating_tab::{
-        FloatingTab,
-        FloatingTabThemePreference,
-    },
+    floating_tab::{FloatingTab, FloatingTabThemePreference},
     get_theme,
 };
 use freya_core::prelude::*;

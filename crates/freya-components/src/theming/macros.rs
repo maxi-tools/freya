@@ -1,10 +1,7 @@
 #[doc(hidden)]
 pub use ::paste::paste;
 use freya_core::prelude::*;
-use torin::{
-    gaps::Gaps,
-    size::Size,
-};
+use torin::{gaps::Gaps, size::Size};
 
 use crate::theming::component_themes::ColorsSheet;
 

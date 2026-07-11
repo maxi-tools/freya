@@ -2,31 +2,19 @@ use std::{
     cell::RefCell,
     collections::hash_map::DefaultHasher,
     fs,
-    hash::{
-        Hash,
-        Hasher,
-    },
+    hash::{Hash, Hasher},
     path::PathBuf,
     rc::Rc,
 };
 
 use anyhow::Context;
 use bytes::Bytes;
-use freya_core::{
-    elements::image::*,
-    prelude::*,
-};
-use freya_engine::prelude::{
-    SkData,
-    SkImage,
-};
+use freya_core::{elements::image::*, prelude::*};
+use freya_engine::prelude::{SkData, SkImage};
 #[cfg(feature = "remote-asset")]
 use ureq::http::Uri;
 
-use crate::{
-    cache::*,
-    loader::CircularLoader,
-};
+use crate::{cache::*, loader::CircularLoader};
 
 /// Supported image sources for [`ImageViewer`].
 ///

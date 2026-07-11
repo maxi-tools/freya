@@ -1,18 +1,11 @@
 use std::{
     cell::RefCell,
-    ops::{
-        Deref,
-        Div,
-    },
+    ops::{Deref, Div},
     path::PathBuf,
     rc::Rc,
 };
 
-use torin::prelude::{
-    Area,
-    CursorPoint,
-    Size2D,
-};
+use torin::prelude::{Area, CursorPoint, Size2D};
 
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum MouseButton {

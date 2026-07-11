@@ -1,8 +1,4 @@
-use freya::{
-    clipboard::Clipboard,
-    prelude::*,
-    terminal::*,
-};
+use freya::{clipboard::Clipboard, prelude::*, terminal::*};
 use futures_util::FutureExt;
 
 fn main() {

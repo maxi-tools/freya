@@ -1,21 +1,8 @@
-use proc_macro2::{
-    Span,
-    TokenStream as TokenStream2,
-};
-use quote::{
-    ToTokens,
-    format_ident,
-    quote,
-};
-use syn::{
-    Ident,
-    Type,
-};
+use proc_macro2::{Span, TokenStream as TokenStream2};
+use quote::{ToTokens, format_ident, quote};
+use syn::{Ident, Type};
 
-use crate::{
-    hash::HashFragment,
-    query::QuerySegment,
-};
+use crate::{hash::HashFragment, query::QuerySegment};
 
 #[derive(Debug, Clone)]
 pub enum RouteSegment {

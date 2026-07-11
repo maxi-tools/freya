@@ -1,21 +1,7 @@
-use std::{
-    any::Any,
-    borrow::Cow,
-    cell::RefCell,
-    collections::HashMap,
-    rc::Rc,
-};
+use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 
-use freya_core::{
-    integration::*,
-    prelude::*,
-};
-use freya_engine::prelude::{
-    ClipOp,
-    Paint,
-    PaintStyle,
-    SkRect,
-};
+use freya_core::{integration::*, prelude::*};
+use freya_engine::prelude::{ClipOp, Paint, PaintStyle, SkRect};
 
 type Callback = Rc<RefCell<dyn FnMut(&mut RenderContext)>>;
 

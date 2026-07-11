@@ -1,7 +1,4 @@
-use std::{
-    fmt,
-    time::Duration,
-};
+use std::{fmt, time::Duration};
 
 use easer::functions::*;
 

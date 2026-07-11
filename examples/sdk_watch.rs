@@ -5,10 +5,7 @@
 
 use std::time::Duration;
 
-use freya::{
-    prelude::*,
-    sdk::use_track_watcher,
-};
+use freya::{prelude::*, sdk::use_track_watcher};
 use tokio::sync::watch;
 
 fn main() {

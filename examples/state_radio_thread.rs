@@ -4,17 +4,11 @@
 )]
 
 use std::{
-    thread::{
-        self,
-        sleep,
-    },
+    thread::{self, sleep},
     time::Duration,
 };
 
-use freya::{
-    prelude::*,
-    radio::*,
-};
+use freya::{prelude::*, radio::*};
 use futures_lite::StreamExt;
 
 fn main() {

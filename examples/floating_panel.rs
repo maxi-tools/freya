@@ -4,16 +4,10 @@
 )]
 
 #[cfg(target_os = "linux")]
-use freya::winit::platform::x11::{
-    WindowAttributesExtX11,
-    WindowType,
-};
+use freya::winit::platform::x11::{WindowAttributesExtX11, WindowType};
 use freya::{
     prelude::*,
-    winit::{
-        dpi::LogicalPosition,
-        window::WindowLevel,
-    },
+    winit::{dpi::LogicalPosition, window::WindowLevel},
 };
 
 fn main() {

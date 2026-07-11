@@ -5,10 +5,7 @@
 
 use freya::prelude::*;
 use rig::{
-    client::{
-        CompletionClient,
-        ProviderClient,
-    },
+    client::{CompletionClient, ProviderClient},
     completion::Prompt,
     providers::openai,
 };

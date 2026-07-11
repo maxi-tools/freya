@@ -1,8 +1,4 @@
-use crate::{
-    NameOfEvent,
-    NodeKey,
-    SourceEvent,
-};
+use crate::{NameOfEvent, NodeKey, SourceEvent};
 
 /// Potential events are events that might get emitted or not.
 #[derive(Clone, Debug, PartialEq)]

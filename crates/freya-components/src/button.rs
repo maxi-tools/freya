@@ -1,13 +1,7 @@
 use freya_core::prelude::*;
-use torin::{
-    gaps::Gaps,
-    size::Size,
-};
+use torin::{gaps::Gaps, size::Size};
 
-use crate::{
-    define_theme,
-    get_theme,
-};
+use crate::{define_theme, get_theme};
 
 define_theme! {
     for = Button;

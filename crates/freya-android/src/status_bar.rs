@@ -1,9 +1,4 @@
-use jni::{
-    JValue,
-    jni_sig,
-    jni_str,
-    objects::JObject,
-};
+use jni::{JValue, jni_sig, jni_str, objects::JObject};
 use winit::platform::android::activity::AndroidApp;
 
 /// Set whether the Android status bar uses light appearance (dark icons for light backgrounds).

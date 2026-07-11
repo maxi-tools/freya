@@ -1,27 +1,17 @@
-use ragnarok::{
-    Area,
-    NameOfEvent,
-};
+use ragnarok::{Area, NameOfEvent};
 use torin::prelude::CursorPoint;
 
 use crate::{
     events::{
         data::{
-            EventType,
-            KeyboardEventData,
-            MouseEventData,
-            PointerEventData,
-            TouchEventData,
+            EventType, KeyboardEventData, MouseEventData, PointerEventData, TouchEventData,
             WheelEventData,
         },
         name::EventName,
     },
     integration::PlatformEvent,
     node_id::NodeId,
-    prelude::{
-        FileEventData,
-        ImePreeditEventData,
-    },
+    prelude::{FileEventData, ImePreeditEventData},
 };
 /// Event emitted to the Tree.
 #[derive(Debug, Clone, PartialEq)]

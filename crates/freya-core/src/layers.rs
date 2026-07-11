@@ -1,12 +1,6 @@
-use std::ops::{
-    Deref,
-    DerefMut,
-};
+use std::ops::{Deref, DerefMut};
 
-use rustc_hash::{
-    FxHashMap,
-    FxHashSet,
-};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::node_id::NodeId;
 

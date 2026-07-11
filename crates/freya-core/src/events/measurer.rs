@@ -1,11 +1,7 @@
 use crate::{
     data::Interactive,
     element::EventMeasurementContext,
-    events::{
-        emittable::EmmitableEvent,
-        name::EventName,
-        platform::PlatformEvent,
-    },
+    events::{emittable::EmmitableEvent, name::EventName, platform::PlatformEvent},
     node_id::NodeId,
     prelude::Color,
     style::fill::Fill,

@@ -3,11 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-use freya::{
-    animation::*,
-    prelude::*,
-    router::*,
-};
+use freya::{animation::*, prelude::*, router::*};
 
 fn main() {
     launch(LaunchConfig::new().with_window(WindowConfig::new(app).with_title("Animated Router")))
