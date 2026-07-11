@@ -5,10 +5,7 @@ pub enum EventsChunk {
 use ragnarok::ProcessedEvents;
 
 use crate::{
-    events::{
-        emittable::EmmitableEvent,
-        name::EventName,
-    },
+    events::{emittable::EmmitableEvent, name::EventName},
     integration::PlatformEvent,
     node_id::NodeId,
     runner::Runner,

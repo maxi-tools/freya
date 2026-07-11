@@ -1,39 +1,24 @@
 use std::{
     collections::HashMap,
     sync::{
-        Arc,
-        Mutex,
-        atomic::{
-            AtomicU32,
-            Ordering,
-        },
+        Arc, Mutex,
+        atomic::{AtomicU32, Ordering},
     },
 };
 
 use anyhow::bail;
 use async_tungstenite::accept_async;
-use freya_core::integration::{
-    NodeId,
-    UserEvent,
-};
+use freya_core::integration::{NodeId, UserEvent};
 use freya_winit::{
     plugins::PluginHandle,
-    renderer::{
-        NativeEvent,
-        NativeWindowEvent,
-        NativeWindowEventAction,
-    },
+    renderer::{NativeEvent, NativeWindowEvent, NativeWindowEventAction},
 };
 use futures_util::stream::StreamExt;
 use smol::net::TcpListener;
 use tungstenite::protocol::Message;
 
 use crate::{
-    IncomingMessage,
-    OutgoingMessage,
-    OutgoingMessageAction,
-    SharedWebsockets,
-    WindowState,
+    IncomingMessage, OutgoingMessage, OutgoingMessageAction, SharedWebsockets, WindowState,
     incoming::IncomingMessageAction,
 };
 

@@ -1,8 +1,4 @@
-use crate::prelude::{
-    State,
-    WritableUtils,
-    use_state,
-};
+use crate::prelude::{State, WritableUtils, use_state};
 
 /// Convert a borrowed value (`&T`) into a component-scoped [`State<T>`].
 ///

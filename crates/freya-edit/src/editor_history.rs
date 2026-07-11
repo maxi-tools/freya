@@ -1,7 +1,4 @@
-use std::time::{
-    Duration,
-    Instant,
-};
+use std::time::{Duration, Instant};
 
 use ropey::Rope;
 
@@ -204,10 +201,7 @@ mod test {
 
     use ropey::Rope;
 
-    use super::{
-        EditorHistory,
-        HistoryChange,
-    };
+    use super::{EditorHistory, HistoryChange};
     use crate::text_editor::TextSelection;
 
     #[test]

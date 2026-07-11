@@ -1,9 +1,5 @@
 use freya_core::prelude::*;
-use torin::{
-    gaps::Gaps,
-    node::Node,
-    size::Size,
-};
+use torin::{gaps::Gaps, node::Node, size::Size};
 
 #[derive(Clone, PartialEq)]
 pub struct ArrowIcon {

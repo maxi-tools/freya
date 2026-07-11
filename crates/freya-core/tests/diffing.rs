@@ -1,9 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::atomic::{
-        AtomicI8,
-        Ordering,
-    },
+    sync::atomic::{AtomicI8, Ordering},
 };
 
 use freya::helpers::*;
@@ -11,10 +8,7 @@ use freya_core::{
     integration::*,
     path_element::PathElement,
     prelude::*,
-    runner::{
-        Diff,
-        MutationRemove,
-    },
+    runner::{Diff, MutationRemove},
 };
 use rustc_hash::FxHashMap;
 use torin::size::Size;

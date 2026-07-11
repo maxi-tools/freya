@@ -1,12 +1,5 @@
 use crate::{
-    prelude::{
-        Area,
-        AreaOf,
-        Available,
-        Parent,
-        Point2D,
-        Size2D,
-    },
+    prelude::{Area, AreaOf, Available, Parent, Point2D, Size2D},
     scaled::Scaled,
 };
 

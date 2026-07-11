@@ -1,8 +1,4 @@
-use freya::{
-    code_editor::*,
-    prelude::*,
-    text_edit::Rope,
-};
+use freya::{code_editor::*, prelude::*, text_edit::Rope};
 
 const SAMPLE_CODE: &str = r#"use freya::prelude::*;
 

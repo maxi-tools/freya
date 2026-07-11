@@ -3,11 +3,7 @@ use torin::size::Size;
 
 use crate::{
     get_theme,
-    scrollviews::{
-        ScrollBarThemePartial,
-        ScrollBarThemePreference,
-        shared::Axis,
-    },
+    scrollviews::{ScrollBarThemePartial, ScrollBarThemePreference, shared::Axis},
 };
 
 enum ScrollThumbState {

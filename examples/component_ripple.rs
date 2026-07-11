@@ -3,10 +3,7 @@
     windows_subsystem = "windows"
 )]
 use freya::{
-    material_design::{
-        ButtonRippleExt,
-        Ripple,
-    },
+    material_design::{ButtonRippleExt, Ripple},
     prelude::*,
 };
 

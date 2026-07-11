@@ -34,9 +34,6 @@ pub mod prelude {
         component::WebView,
         lifecycle::WebViewManager,
         plugin::WebViewPlugin,
-        registry::{
-            WebViewConfig,
-            WebViewId,
-        },
+        registry::{WebViewConfig, WebViewId},
     };
 }

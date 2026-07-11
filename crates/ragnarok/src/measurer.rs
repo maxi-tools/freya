@@ -1,17 +1,8 @@
 use itertools::Itertools;
 
 use crate::{
-    Area,
-    CursorPoint,
-    EmmitableEvent,
-    NameOfEvent,
-    NodeKey,
-    NodesState,
-    ProcessedEvents,
-    SourceEvent,
-    measure_emmitable_events,
-    measure_potential_events,
-    measure_source_global_events,
+    Area, CursorPoint, EmmitableEvent, NameOfEvent, NodeKey, NodesState, ProcessedEvents,
+    SourceEvent, measure_emmitable_events, measure_potential_events, measure_source_global_events,
 };
 
 pub trait EventsMeasurer

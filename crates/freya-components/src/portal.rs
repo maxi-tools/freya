@@ -1,19 +1,9 @@
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    time::Duration,
-};
+use std::{collections::HashMap, fmt::Debug, time::Duration};
 
 use freya_animation::prelude::*;
-use freya_core::{
-    prelude::*,
-    scope_id::ScopeId,
-};
+use freya_core::{prelude::*, scope_id::ScopeId};
 use torin::{
-    prelude::{
-        Area,
-        Position,
-    },
+    prelude::{Area, Position},
     size::Size,
 };
 

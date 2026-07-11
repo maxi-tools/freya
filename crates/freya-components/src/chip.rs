@@ -1,14 +1,7 @@
 use freya_core::prelude::*;
-use torin::{
-    gaps::Gaps,
-    size::Size,
-};
+use torin::{gaps::Gaps, size::Size};
 
-use crate::{
-    define_theme,
-    get_theme,
-    icons::tick::TickIcon,
-};
+use crate::{define_theme, get_theme, icons::tick::TickIcon};
 
 define_theme! {
     %[component]

@@ -74,18 +74,7 @@ pub use fluent;
 pub use unic_langid;
 
 pub mod prelude {
-    pub use unic_langid::{
-        LanguageIdentifier,
-        LanguageIdentifierError,
-        lang,
-        langid,
-    };
+    pub use unic_langid::{LanguageIdentifier, LanguageIdentifierError, lang, langid};
 
-    pub use crate::{
-        error::Error,
-        i18n::*,
-        t,
-        te,
-        tid,
-    };
+    pub use crate::{error::Error, i18n::*, t, te, tid};
 }

@@ -1,18 +1,12 @@
 use freya_core::{
-    events::data::{
-        Event,
-        SizedEventData,
-    },
+    events::data::{Event, SizedEventData},
     prelude::*,
 };
 
 use crate::{
     element::webview,
     lifecycle::WebViewLifecycleEvent,
-    prelude::{
-        WebViewConfig,
-        WebViewId,
-    },
+    prelude::{WebViewConfig, WebViewId},
     registry::WebViewCallback,
 };
 

@@ -1,12 +1,6 @@
-use rustc_hash::{
-    FxHashMap,
-    FxHashSet,
-};
+use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::{
-    node_id::NodeId,
-    prelude::AccessibilityFocusStrategy,
-};
+use crate::{node_id::NodeId, prelude::AccessibilityFocusStrategy};
 
 #[derive(Default)]
 pub struct AccessibilityDirtyNodes {

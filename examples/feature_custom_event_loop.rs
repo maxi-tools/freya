@@ -3,10 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-use freya::{
-    prelude::*,
-    winit::event_loop::EventLoop,
-};
+use freya::{prelude::*, winit::event_loop::EventLoop};
 
 fn main() {
     let event_loop = EventLoop::<NativeEvent>::with_user_event()

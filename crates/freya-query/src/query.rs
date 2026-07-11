@@ -1,35 +1,22 @@
 use core::fmt;
 use std::{
-    cell::{
-        Ref,
-        RefCell,
-    },
+    cell::{Ref, RefCell},
     collections::HashMap,
     future::Future,
     hash::Hash,
     mem,
     rc::Rc,
-    time::{
-        Duration,
-        Instant,
-    },
+    time::{Duration, Instant},
 };
 
 use async_io::Timer;
 use freya_core::{
     integration::FxHashSet,
-    lifecycle::context::{
-        consume_context,
-        provide_context_for_scope_id,
-        try_consume_context,
-    },
+    lifecycle::context::{consume_context, provide_context_for_scope_id, try_consume_context},
     prelude::*,
     scope_id::ScopeId,
 };
-use futures_util::stream::{
-    FuturesUnordered,
-    StreamExt,
-};
+use futures_util::stream::{FuturesUnordered, StreamExt};
 
 pub trait QueryCapability
 where

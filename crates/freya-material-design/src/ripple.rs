@@ -3,11 +3,7 @@ use std::time::Duration;
 use freya_animation::prelude::*;
 use freya_components::theming::hooks::get_theme_or_default;
 use freya_core::prelude::*;
-use torin::prelude::{
-    Area,
-    Position,
-    Size,
-};
+use torin::prelude::{Area, Position, Size};
 
 /// A ripple effect instance
 #[derive(Clone, PartialEq)]

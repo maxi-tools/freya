@@ -1,9 +1,6 @@
 use std::{
     ops::Deref,
-    time::{
-        Duration,
-        Instant,
-    },
+    time::{Duration, Instant},
 };
 
 use async_io::Timer;

@@ -1,26 +1,17 @@
 use std::{
     borrow::Cow,
     fmt::Display,
-    ops::{
-        Mul,
-        Range,
-    },
+    ops::{Mul, Range},
     time::Duration,
 };
 
-use freya_core::{
-    elements::paragraph::ParagraphHolderInner,
-    prelude::*,
-};
+use freya_core::{elements::paragraph::ParagraphHolderInner, prelude::*};
 use freya_edit::*;
 use ropey::Rope;
 use tree_sitter::InputEdit;
 
 use crate::{
-    editor_theme::SyntaxTheme,
-    languages::LanguageId,
-    metrics::EditorMetrics,
-    syntax::InputEditExt,
+    editor_theme::SyntaxTheme, languages::LanguageId, metrics::EditorMetrics, syntax::InputEditExt,
 };
 
 pub struct CodeEditorData {

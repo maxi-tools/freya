@@ -3,10 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-use freya::{
-    prelude::*,
-    router::*,
-};
+use freya::{prelude::*, router::*};
 
 fn main() {
     launch(LaunchConfig::new().with_window(WindowConfig::new(app).with_title("Complex Router")))

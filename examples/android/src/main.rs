@@ -1,8 +1,4 @@
-use freya::prelude::{
-    LaunchConfig,
-    WindowConfig,
-    launch,
-};
+use freya::prelude::{LaunchConfig, WindowConfig, launch};
 
 mod app;
 

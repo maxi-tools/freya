@@ -1,16 +1,9 @@
 use freya_core::prelude::*;
-use freya_router::prelude::{
-    NavigationTarget,
-    RouterContext,
-};
+use freya_router::prelude::{NavigationTarget, RouterContext};
 
 use crate::{
-    define_theme,
-    get_theme,
-    tooltip::{
-        Tooltip,
-        TooltipContainer,
-    },
+    define_theme, get_theme,
+    tooltip::{Tooltip, TooltipContainer},
 };
 
 define_theme! {

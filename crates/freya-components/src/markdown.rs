@@ -1,40 +1,18 @@
-use std::{
-    borrow::Cow,
-    mem,
-};
+use std::{borrow::Cow, mem};
 
 use freya_core::prelude::*;
-use pulldown_cmark::{
-    Event,
-    HeadingLevel,
-    Options,
-    Parser,
-    Tag,
-    TagEnd,
-};
+use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use torin::prelude::*;
 
 #[cfg(feature = "remote-asset")]
 use crate::Uri;
 #[cfg(feature = "remote-asset")]
-use crate::image_viewer::{
-    ImageSource,
-    ImageViewer,
-};
+use crate::image_viewer::{ImageSource, ImageViewer};
 #[cfg(feature = "router")]
-use crate::link::{
-    Link,
-    LinkTooltip,
-};
+use crate::link::{Link, LinkTooltip};
 use crate::{
     define_theme,
-    table::{
-        Table,
-        TableBody,
-        TableCell,
-        TableHead,
-        TableRow,
-    },
+    table::{Table, TableBody, TableCell, TableHead, TableRow},
 };
 
 define_theme! {

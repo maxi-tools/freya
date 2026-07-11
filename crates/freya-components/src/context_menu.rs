@@ -1,7 +1,4 @@
-use freya_core::{
-    integration::ScopeId,
-    prelude::*,
-};
+use freya_core::{integration::ScopeId, prelude::*};
 use torin::prelude::CursorPoint;
 
 use crate::menu::Menu;

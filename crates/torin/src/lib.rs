@@ -21,15 +21,8 @@ pub use values::*;
 
 pub mod prelude {
     pub use crate::{
-        custom_measurer::*,
-        gaps::*,
-        geometry::*,
-        measure::*,
-        node::*,
-        scaled::*,
-        torin::*,
-        tree_adapter::*,
-        values::prelude::*,
+        custom_measurer::*, gaps::*, geometry::*, measure::*, node::*, scaled::*, torin::*,
+        tree_adapter::*, values::prelude::*,
     };
 }
 

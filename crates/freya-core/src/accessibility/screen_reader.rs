@@ -1,9 +1,6 @@
 use std::sync::{
     Arc,
-    atomic::{
-        AtomicBool,
-        Ordering,
-    },
+    atomic::{AtomicBool, Ordering},
 };
 
 use crate::prelude::consume_root_context;

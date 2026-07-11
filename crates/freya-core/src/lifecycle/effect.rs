@@ -1,16 +1,8 @@
-use std::{
-    cell::RefCell,
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     lifecycle::writable_utils::WritableUtils,
-    prelude::{
-        State,
-        spawn,
-        use_hook,
-        use_reactive,
-    },
+    prelude::{State, spawn, use_hook, use_reactive},
     reactive_context::ReactiveContext,
 };
 

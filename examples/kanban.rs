@@ -5,10 +5,7 @@
 
 use std::time::Duration;
 
-use freya::{
-    animation::*,
-    prelude::*,
-};
+use freya::{animation::*, prelude::*};
 
 fn main() {
     launch(LaunchConfig::new().with_window(WindowConfig::new(app).with_size(900., 600.)))

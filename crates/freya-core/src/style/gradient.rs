@@ -1,9 +1,6 @@
 use std::{
     f32::consts::FRAC_PI_2,
-    fmt::{
-        self,
-        Debug,
-    },
+    fmt::{self, Debug},
 };
 
 use freya_engine::prelude::*;

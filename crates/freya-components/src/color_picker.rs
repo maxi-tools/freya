@@ -1,34 +1,17 @@
 use freya_animation::{
     easing::Function,
-    hook::{
-        AnimatedValue,
-        Ease,
-        OnChange,
-        OnCreation,
-        ReadAnimatedValue,
-        use_animation,
-    },
+    hook::{AnimatedValue, Ease, OnChange, OnCreation, ReadAnimatedValue, use_animation},
     prelude::AnimNum,
 };
 use freya_core::prelude::*;
 use freya_edit::Clipboard;
-use torin::prelude::{
-    Alignment,
-    Area,
-    CursorPoint,
-    Position,
-    Size,
-};
+use torin::prelude::{Alignment, Area, CursorPoint, Position, Size};
 
 use crate::{
     button::Button,
     context_menu::ContextMenu,
-    define_theme,
-    get_theme,
-    menu::{
-        Menu,
-        MenuButton,
-    },
+    define_theme, get_theme,
+    menu::{Menu, MenuButton},
 };
 
 define_theme! {

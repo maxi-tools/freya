@@ -1,16 +1,7 @@
-use std::{
-    borrow::Cow,
-    cmp::Ordering,
-    fmt::Display,
-    ops::Range,
-};
+use std::{borrow::Cow, cmp::Ordering, fmt::Display, ops::Range};
 
 use freya_clipboard::clipboard::Clipboard;
-use keyboard_types::{
-    Key,
-    Modifiers,
-    NamedKey,
-};
+use keyboard_types::{Key, Modifiers, NamedKey};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::editor_history::EditorHistory;

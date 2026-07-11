@@ -3,11 +3,7 @@ use freya_engine::prelude::*;
 use ropey::Rope;
 use tree_sitter::InputEdit;
 
-use crate::{
-    editor_theme::SyntaxTheme,
-    languages::LanguageId,
-    syntax::*,
-};
+use crate::{editor_theme::SyntaxTheme, languages::LanguageId, syntax::*};
 
 pub struct EditorMetrics {
     pub(crate) syntax_blocks: SyntaxBlocks,

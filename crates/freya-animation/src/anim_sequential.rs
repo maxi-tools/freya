@@ -1,9 +1,6 @@
 use std::ops::Deref;
 
-use crate::hook::{
-    AnimDirection,
-    AnimatedValue,
-};
+use crate::hook::{AnimDirection, AnimatedValue};
 
 /// Chain a sequence of animated values.
 #[derive(Clone)]

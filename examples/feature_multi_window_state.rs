@@ -4,17 +4,9 @@
 )]
 use std::path::PathBuf;
 
-use freya::{
-    prelude::*,
-    radio::*,
-    router::*,
-};
+use freya::{prelude::*, radio::*, router::*};
 use freya_i18n::{
-    i18n::{
-        I18n,
-        I18nConfig,
-        use_share_i18n,
-    },
+    i18n::{I18n, I18nConfig, use_share_i18n},
     prelude::langid,
     t,
 };

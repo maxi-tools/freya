@@ -1,20 +1,12 @@
 use freya_core::prelude::*;
 use torin::{
-    prelude::{
-        Alignment,
-        Direction,
-        Position,
-    },
+    prelude::{Alignment, Direction, Position},
     size::Size,
 };
 
 use crate::{
-    define_theme,
-    get_theme,
-    scrollviews::{
-        ScrollThumb,
-        shared::Axis,
-    },
+    define_theme, get_theme,
+    scrollviews::{ScrollThumb, shared::Axis},
 };
 
 define_theme! {

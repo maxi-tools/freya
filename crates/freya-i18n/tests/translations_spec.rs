@@ -1,20 +1,11 @@
 use std::path::PathBuf;
 
 use freya_i18n::{
-    prelude::{
-        I18n,
-        I18nConfig,
-        use_init_i18n,
-    },
-    t,
-    te,
-    tid,
+    prelude::{I18n, I18nConfig, use_init_i18n},
+    t, te, tid,
 };
 use freya_testing::prelude::*;
-use unic_langid::{
-    LanguageIdentifier,
-    langid,
-};
+use unic_langid::{LanguageIdentifier, langid};
 
 #[test]
 fn translate_from_static_source() {

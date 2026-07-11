@@ -1,17 +1,10 @@
-use std::{
-    collections::VecDeque,
-    rc::Rc,
-};
+use std::{collections::VecDeque, rc::Rc};
 
 use rustc_hash::FxHashMap;
 
 use crate::{
     diff_key::DiffKey,
-    element::{
-        ComponentProps,
-        Element,
-        ElementExt,
-    },
+    element::{ComponentProps, Element, ElementExt},
     runner::Diff,
 };
 

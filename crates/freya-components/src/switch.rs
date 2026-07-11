@@ -1,16 +1,9 @@
 use accesskit::Toggled;
 use freya_animation::prelude::*;
 use freya_core::prelude::*;
-use torin::{
-    alignment::Alignment,
-    gaps::Gaps,
-    size::Size,
-};
+use torin::{alignment::Alignment, gaps::Gaps, size::Size};
 
-use crate::{
-    define_theme,
-    get_theme,
-};
+use crate::{define_theme, get_theme};
 
 define_theme! {
     for = Switch;

@@ -1,9 +1,6 @@
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{
-    Ident,
-    Type,
-};
+use syn::{Ident, Type};
 
 #[derive(Debug)]
 pub struct HashFragment {

@@ -1,16 +1,9 @@
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::atomic::AtomicU64,
-};
+use std::{cell::RefCell, rc::Rc, sync::atomic::AtomicU64};
 
 use rustc_hash::FxHashMap;
 
 use crate::{
-    prelude::{
-        Task,
-        TaskId,
-    },
+    prelude::{Task, TaskId},
     reactive_context::ReactiveContext,
     runner::Message,
     scope::ScopeStorage,

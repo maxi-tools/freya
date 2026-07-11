@@ -3,23 +3,13 @@
     windows_subsystem = "windows"
 )]
 
-use std::{
-    any::Any,
-    borrow::Cow,
-    rc::Rc,
-};
+use std::{any::Any, borrow::Cow, rc::Rc};
 
 use freya::{
-    engine::prelude::{
-        Paint,
-        SkRect,
-    },
+    engine::prelude::{Paint, SkRect},
     prelude::*,
 };
-use freya_core::{
-    element::ElementExt,
-    tree::DiffModifies,
-};
+use freya_core::{element::ElementExt, tree::DiffModifies};
 
 fn main() {
     launch(LaunchConfig::new().with_window(WindowConfig::new(app)))

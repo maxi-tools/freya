@@ -1,12 +1,7 @@
 use itertools::Itertools;
 
 use crate::{
-    EmmitableEvent,
-    EventsMeasurer,
-    NameOfEvent,
-    NodeKey,
-    PotentialEvent,
-    PotentialEvents,
+    EmmitableEvent, EventsMeasurer, NameOfEvent, NodeKey, PotentialEvent, PotentialEvents,
     SourceEvent,
 };
 

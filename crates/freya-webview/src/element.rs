@@ -1,45 +1,21 @@
 //! WebView element for rendering web content in Freya.
 
-use std::{
-    any::Any,
-    borrow::Cow,
-    collections::HashMap,
-    rc::Rc,
-};
+use std::{any::Any, borrow::Cow, collections::HashMap, rc::Rc};
 
 use freya_core::{
-    data::{
-        AccessibilityData,
-        EffectData,
-        LayoutData,
-        StyleState,
-        TextStyleData,
-    },
+    data::{AccessibilityData, EffectData, LayoutData, StyleState, TextStyleData},
     diff_key::DiffKey,
-    element::{
-        Element,
-        ElementExt,
-        EventHandlerType,
-    },
+    element::{Element, ElementExt, EventHandlerType},
     events::name::EventName,
     layers::Layer,
     prelude::{
-        AccessibilityExt,
-        ContainerExt,
-        EventHandlersExt,
-        KeyExt,
-        LayerExt,
-        LayoutExt,
-        MaybeExt,
+        AccessibilityExt, ContainerExt, EventHandlersExt, KeyExt, LayerExt, LayoutExt, MaybeExt,
     },
     tree::DiffModifies,
 };
 use rustc_hash::FxHashMap;
 
-use crate::registry::{
-    WebViewConfig,
-    WebViewId,
-};
+use crate::registry::{WebViewConfig, WebViewId};
 
 /// WebView element data.
 #[derive(Clone)]

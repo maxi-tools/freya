@@ -1,18 +1,11 @@
-use std::fmt::{
-    self,
-    Pointer,
-};
+use std::fmt::{self, Pointer};
 
 use freya_engine::prelude::Paint;
 use torin::prelude::Area;
 
 use crate::{
     prelude::Color,
-    style::gradient::{
-        ConicGradient,
-        LinearGradient,
-        RadialGradient,
-    },
+    style::gradient::{ConicGradient, LinearGradient, RadialGradient},
 };
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

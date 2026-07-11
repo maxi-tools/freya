@@ -6,13 +6,8 @@ use freya::{
     prelude::*,
     radio::*,
     tray::{
-        TrayEvent,
-        TrayIconBuilder,
-        menu::{
-            Menu,
-            MenuEvent,
-            MenuItem,
-        },
+        TrayEvent, TrayIconBuilder,
+        menu::{Menu, MenuEvent, MenuItem},
     },
 };
 

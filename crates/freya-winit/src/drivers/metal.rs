@@ -1,42 +1,20 @@
 use freya_engine::prelude::{
-    ColorType,
-    DirectContext,
-    Surface as SkiaSurface,
-    SurfaceOrigin,
-    backend_render_targets,
-    direct_contexts,
-    mtl,
-    wrap_backend_render_target,
+    ColorType, DirectContext, Surface as SkiaSurface, SurfaceOrigin, backend_render_targets,
+    direct_contexts, mtl, wrap_backend_render_target,
 };
-use objc2::{
-    rc::Retained,
-    runtime::ProtocolObject,
-};
+use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_app_kit::NSView;
 use objc2_core_foundation::CGSize;
 use objc2_metal::{
-    MTLCommandBuffer,
-    MTLCommandQueue,
-    MTLCreateSystemDefaultDevice,
-    MTLDevice,
-    MTLDrawable,
+    MTLCommandBuffer, MTLCommandQueue, MTLCreateSystemDefaultDevice, MTLDevice, MTLDrawable,
     MTLPixelFormat,
 };
-use objc2_quartz_core::{
-    CAMetalDrawable,
-    CAMetalLayer,
-};
-use raw_window_handle::{
-    HasWindowHandle,
-    RawWindowHandle,
-};
+use objc2_quartz_core::{CAMetalDrawable, CAMetalLayer};
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::{
     dpi::PhysicalSize,
     event_loop::ActiveEventLoop,
-    window::{
-        Window,
-        WindowAttributes,
-    },
+    window::{Window, WindowAttributes},
 };
 
 /// Graphics driver using Metal (macOS native).

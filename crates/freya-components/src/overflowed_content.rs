@@ -1,18 +1,8 @@
 use std::time::Duration;
 
-use freya_animation::prelude::{
-    AnimDirection,
-    AnimNum,
-    Ease,
-    Function,
-    use_animation,
-};
+use freya_animation::prelude::{AnimDirection, AnimNum, Ease, Function, use_animation};
 use freya_core::prelude::*;
-use torin::{
-    node::Node,
-    prelude::Area,
-    size::Size,
-};
+use torin::{node::Node, prelude::Area, size::Size};
 
 /// The direction in which [`OverflowedContent`] scrolls.
 #[derive(Clone, PartialEq, Default)]

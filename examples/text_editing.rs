@@ -2,10 +2,7 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
-use freya::{
-    prelude::*,
-    text_edit::*,
-};
+use freya::{prelude::*, text_edit::*};
 
 fn main() {
     launch(LaunchConfig::new().with_window(WindowConfig::new(app)))

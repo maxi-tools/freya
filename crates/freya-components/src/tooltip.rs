@@ -2,26 +2,15 @@ use std::borrow::Cow;
 
 use freya_animation::{
     easing::Function,
-    hook::{
-        AnimatedValue,
-        Ease,
-        OnChange,
-        OnCreation,
-        ReadAnimatedValue,
-        use_animation,
-    },
+    hook::{AnimatedValue, Ease, OnChange, OnCreation, ReadAnimatedValue, use_animation},
     prelude::AnimNum,
 };
 use freya_core::prelude::*;
 
 use crate::{
-    attached::{
-        Attached,
-        AttachedPosition,
-    },
+    attached::{Attached, AttachedPosition},
     context_menu::ContextMenu,
-    define_theme,
-    get_theme,
+    define_theme, get_theme,
 };
 
 define_theme! {

@@ -3,21 +3,12 @@
     windows_subsystem = "windows"
 )]
 use std::{
-    ops::{
-        Add,
-        Sub,
-    },
+    ops::{Add, Sub},
     time::Duration,
 };
 
-use freya::{
-    animation::Function,
-    prelude::*,
-};
-use rand::{
-    rng,
-    seq::SliceRandom,
-};
+use freya::{animation::Function, prelude::*};
+use rand::{rng, seq::SliceRandom};
 
 fn main() {
     launch(LaunchConfig::new().with_window(WindowConfig::new(app).with_size(900., 800.)))

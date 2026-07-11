@@ -2,10 +2,7 @@ use freya_core::prelude::PreferredTheme;
 
 use crate::theming::{
     component_themes::Theme,
-    themes::{
-        dark_theme,
-        light_theme,
-    },
+    themes::{dark_theme, light_theme},
 };
 
 pub trait FromPreference {

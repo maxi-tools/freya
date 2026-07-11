@@ -1,8 +1,5 @@
 use freya_core::prelude::*;
-use torin::{
-    prelude::Direction,
-    size::Size,
-};
+use torin::{prelude::Direction, size::Size};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Axis {
