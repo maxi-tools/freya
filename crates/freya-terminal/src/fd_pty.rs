@@ -128,6 +128,9 @@ mod tests {
 
     #[test]
     fn resize_on_real_pty() {
+        let _guard = crate::test_support::PTY_FD_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(PtySize {
@@ -160,6 +163,9 @@ mod tests {
 
     #[test]
     fn try_clone_reader_and_take_writer() {
+        let _guard = crate::test_support::PTY_FD_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(PtySize::default()).expect("openpty");
 
@@ -181,6 +187,9 @@ mod tests {
         // so a subsequent take_writer on a valid re-wrap path still works.
         // Here we only assert the flag stays false after a failed dup on a
         // deliberately invalid fd path by using a closed fd master.
+        let _guard = crate::test_support::PTY_FD_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(PtySize::default()).expect("openpty");
         let raw_fd = pair.master.as_raw_fd().expect("as_raw_fd");
@@ -216,6 +225,9 @@ mod tests {
         // Exercises the public RawFdMasterPty + real spawned child lifecycle
         // end-to-end: spawn, resize the pty, kill the child, and reap it so no
         // zombie/orphan process remains behind.
+        let _guard = crate::test_support::PTY_FD_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(PtySize {
@@ -268,6 +280,9 @@ mod tests {
         // A freshly spawned child on the pty slave becomes both the session
         // leader and the tty's foreground process group leader, so
         // process_group_leader() must report its pid.
+        let _guard = crate::test_support::PTY_FD_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(PtySize::default()).expect("openpty");
 

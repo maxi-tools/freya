@@ -305,6 +305,9 @@ mod tests {
         // fd, which would make the master's own cleanup trip the OS's
         // double-close safety abort — a real bug the `OwnedFd` switch is
         // meant to catch, not something a test should trigger on purpose.
+        let _guard = crate::test_support::PTY_FD_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(PtySize::default()).expect("openpty");
 
