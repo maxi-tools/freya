@@ -1,8 +1,8 @@
-use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
+use std::{cell::RefCell, io::Read, path::PathBuf, rc::Rc, time::Instant};
 
 use freya_core::{
     notify::ArcNotify,
-    prelude::{Platform, UserEvent, spawn_forever},
+    prelude::{Platform, TaskHandle, UserEvent, spawn_forever},
 };
 use futures_lite::AsyncReadExt;
 use keyboard_types::Modifiers;
@@ -94,6 +94,216 @@ pub(crate) fn spawn_pty(
     attach_spawned_child(id, pair.master, child, scrollback_size)
 }
 
+/// Shared, ref-counted terminal state created before any I/O is wired up.
+///
+/// Bundled into one struct purely to keep [`setup_terminal_from_master`]'s
+/// delegation to the helpers below manageable — this is a pure grouping of
+/// the same fields that used to be separate local variables, no behavior
+/// change.
+struct TerminalState {
+    buffer: Rc<RefCell<TerminalBuffer>>,
+    parser: Rc<RefCell<Parser>>,
+    writer: Rc<RefCell<Option<Box<dyn std::io::Write + Send>>>>,
+    closer_notifier: ArcNotify,
+    output_notifier: ArcNotify,
+    title_notifier: ArcNotify,
+    cwd: Rc<RefCell<Option<PathBuf>>>,
+    title: Rc<RefCell<Option<String>>>,
+    clipboard_content: Rc<RefCell<Option<String>>>,
+    clipboard_notifier: ArcNotify,
+}
+
+/// Allocate the buffer, parser, writer cell, and notifiers shared by the
+/// reader and PTY tasks and by the resulting [`TerminalHandle`].
+fn init_terminal_state(scrollback_size: usize) -> TerminalState {
+    TerminalState {
+        buffer: Rc::new(RefCell::new(TerminalBuffer::default())),
+        parser: Rc::new(RefCell::new(Parser::new(24, 80, scrollback_size))),
+        writer: Rc::new(RefCell::new(None)),
+        closer_notifier: ArcNotify::new(),
+        output_notifier: ArcNotify::new(),
+        title_notifier: ArcNotify::new(),
+        cwd: Rc::new(RefCell::new(None)),
+        title: Rc::new(RefCell::new(None)),
+        clipboard_content: Rc::new(RefCell::new(None)),
+        clipboard_notifier: ArcNotify::new(),
+    }
+}
+
+/// Take the writer and reader halves out of `master`, storing the writer in
+/// `writer` and wrapping `master` itself for shared, resizable access.
+///
+/// Returns the async-wrapped reader alongside the shared master handle.
+fn wire_master_io(
+    master: Box<dyn MasterPty + Send>,
+    writer: &Rc<RefCell<Option<Box<dyn std::io::Write + Send>>>>,
+) -> Result<
+    (
+        blocking::Unblock<Box<dyn Read + Send>>,
+        Rc<RefCell<Box<dyn MasterPty + Send>>>,
+    ),
+    TerminalError,
+> {
+    let master_writer = master
+        .take_writer()
+        .map_err(|e| TerminalError::PtyError(e.to_string()))?;
+    *writer.borrow_mut() = Some(master_writer);
+
+    let reader = master
+        .try_clone_reader()
+        .map_err(|e| TerminalError::PtyError(e.to_string()))?;
+    let reader = blocking::Unblock::new(reader);
+
+    Ok((reader, Rc::new(RefCell::new(master))))
+}
+
+/// Spawn the task that rebuilds `state.buffer` from `state.parser` each time
+/// the PTY task (see [`spawn_pty_task`]) signals new output on `update_rx`,
+/// and marks the terminal closed (dropping the writer, notifying
+/// `state.closer_notifier`) once the channel closes, i.e. the PTY task has
+/// exited.
+fn spawn_reader_task(
+    mut update_rx: futures_channel::mpsc::UnboundedReceiver<()>,
+    state: &TerminalState,
+    platform: Platform,
+) -> TaskHandle {
+    let parser = state.parser.clone();
+    let buffer = state.buffer.clone();
+    let closer_notifier = state.closer_notifier.clone();
+    let writer = state.writer.clone();
+    spawn_forever(async move {
+        use futures_lite::StreamExt;
+        while let Some(()) = update_rx.next().await {
+            let mut parser = parser.borrow_mut();
+            let total_scrollback = query_max_scrollback(&mut parser);
+
+            let mut buffer = buffer.borrow_mut();
+            let old_total_scrollback = buffer.total_scrollback;
+            let delta = total_scrollback.saturating_sub(old_total_scrollback);
+            parser.screen_mut().set_scrollback(buffer.scroll_offset);
+            let mut new_buffer = extract_buffer(&parser, buffer.scroll_offset, total_scrollback);
+            parser.screen_mut().set_scrollback(0);
+
+            new_buffer.selection = buffer.selection.take().map(|mut selection| {
+                selection.start_scroll = selection.start_scroll.saturating_add(delta);
+                selection.end_scroll = selection.end_scroll.saturating_add(delta);
+                selection
+            });
+            *buffer = new_buffer;
+            platform.send(UserEvent::RequestRedraw);
+        }
+        // Channel closed — PTY exited
+        *writer.borrow_mut() = None;
+        closer_notifier.notify();
+        platform.send(UserEvent::RequestRedraw);
+    })
+}
+
+/// Spawn the task that reads raw bytes from `reader`, feeds them to the
+/// VT100 parser, detects terminal queries/OSC sequences via termwiz, writes
+/// any required responses back through `state.writer`, and pings
+/// `update_tx` / `state.output_notifier` after each chunk so the reader task
+/// (see [`spawn_reader_task`]) can rebuild the buffer.
+fn spawn_pty_task(
+    mut reader: blocking::Unblock<Box<dyn Read + Send>>,
+    update_tx: futures_channel::mpsc::UnboundedSender<()>,
+    state: &TerminalState,
+) -> TaskHandle {
+    let writer = state.writer.clone();
+    let parser = state.parser.clone();
+    let output_notifier = state.output_notifier.clone();
+    let cwd = state.cwd.clone();
+    let title = state.title.clone();
+    let title_notifier = state.title_notifier.clone();
+    let clipboard_content = state.clipboard_content.clone();
+    let clipboard_notifier = state.clipboard_notifier.clone();
+    spawn_forever(async move {
+        let mut tw_parser = TermwizParser::new();
+        loop {
+            let mut buf = [0u8; 4096];
+
+            match reader.read(&mut buf).await {
+                Ok(0) => break,
+                Ok(n) => {
+                    let data = &buf[..n];
+
+                    parser.borrow_mut().process(data);
+
+                    // Use termwiz to detect terminal queries and OSC sequences
+                    let actions = tw_parser.parse_as_vec(data);
+                    let mut responses: Vec<Vec<u8>> = Vec::new();
+
+                    for action in actions {
+                        match action {
+                            Action::CSI(CSI::Device(dev)) => match *dev {
+                                Device::RequestPrimaryDeviceAttributes => {
+                                    responses.push(b"\x1b[?62;22c".to_vec());
+                                }
+                                Device::RequestSecondaryDeviceAttributes => {
+                                    responses.push(b"\x1b[>0;0;0c".to_vec());
+                                }
+                                Device::StatusReport => {
+                                    responses.push(b"\x1b[0n".to_vec());
+                                }
+                                _ => {}
+                            },
+                            Action::CSI(CSI::Cursor(Cursor::RequestActivePositionReport)) => {
+                                let p = parser.borrow();
+                                let (row, col) = p.screen().cursor_position();
+                                let response = format!("\x1b[{};{}R", row + 1, col + 1);
+                                responses.push(response.into_bytes());
+                            }
+                            Action::OperatingSystemCommand(osc) => match *osc {
+                                OperatingSystemCommand::CurrentWorkingDirectory(url) => {
+                                    // Strip file:// prefix if present
+                                    let path = if let Some(stripped) = url.strip_prefix("file://") {
+                                        // file:///path or file://hostname/path
+                                        if let Some(rest) = stripped.strip_prefix('/') {
+                                            PathBuf::from(format!("/{rest}"))
+                                        } else if let Some((_host, path)) = stripped.split_once('/')
+                                        {
+                                            PathBuf::from(format!("/{path}"))
+                                        } else {
+                                            PathBuf::from(stripped)
+                                        }
+                                    } else {
+                                        PathBuf::from(url)
+                                    };
+                                    *cwd.borrow_mut() = Some(path);
+                                }
+                                OperatingSystemCommand::SetWindowTitle(t)
+                                | OperatingSystemCommand::SetIconNameAndWindowTitle(t) => {
+                                    *title.borrow_mut() = Some(t);
+                                    title_notifier.notify();
+                                }
+                                OperatingSystemCommand::SetSelection(_sel, text) => {
+                                    *clipboard_content.borrow_mut() = Some(text);
+                                    clipboard_notifier.notify();
+                                }
+                                _ => {}
+                            },
+                            _ => {}
+                        }
+                    }
+
+                    if !responses.is_empty()
+                        && let Some(writer) = &mut *writer.borrow_mut()
+                    {
+                        for response in responses {
+                            let _ = writer.write_all(&response);
+                        }
+                        let _ = writer.flush();
+                    }
+
+                    let _ = update_tx.unbounded_send(());
+                    output_notifier.notify();
+                }
+                Err(_) => break,
+            }
+        }
+    })
+}
+
 /// Wire up a [`MasterPty`] (reader, writer, async tasks) into a [`TerminalHandle`].
 ///
 /// Shared post-PTY-creation path used by both [`spawn_pty`] and
@@ -103,163 +313,27 @@ pub(crate) fn setup_terminal_from_master(
     master: Box<dyn MasterPty + Send>,
     scrollback_size: usize,
 ) -> Result<TerminalHandle, TerminalError> {
-    let (update_tx, mut update_rx) = futures_channel::mpsc::unbounded::<()>();
+    let (update_tx, update_rx) = futures_channel::mpsc::unbounded::<()>();
 
-    let buffer = Rc::new(RefCell::new(TerminalBuffer::default()));
-    let parser = Rc::new(RefCell::new(Parser::new(24, 80, scrollback_size)));
-    let writer = Rc::new(RefCell::new(None::<Box<dyn std::io::Write + Send>>));
-    let closer_notifier = ArcNotify::new();
-    let output_notifier = ArcNotify::new();
-    let title_notifier = ArcNotify::new();
-    let cwd: Rc<RefCell<Option<PathBuf>>> = Rc::new(RefCell::new(None));
-    let title: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
-    let clipboard_content: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
-    let clipboard_notifier = ArcNotify::new();
-
-    let master_writer = master
-        .take_writer()
-        .map_err(|e| TerminalError::PtyError(e.to_string()))?;
-    *writer.borrow_mut() = Some(master_writer);
-
-    let reader = master
-        .try_clone_reader()
-        .map_err(|e| TerminalError::PtyError(e.to_string()))?;
-    let mut reader = blocking::Unblock::new(reader);
-
-    let master: Rc<RefCell<Box<dyn MasterPty + Send>>> = Rc::new(RefCell::new(master));
+    let state = init_terminal_state(scrollback_size);
+    let (reader, master) = wire_master_io(master, &state.writer)?;
 
     let platform = Platform::get();
-    let reader_task = spawn_forever({
-        let parser = parser.clone();
-        let buffer = buffer.clone();
-        let closer_notifier = closer_notifier.clone();
-        let writer = writer.clone();
-        async move {
-            use futures_lite::StreamExt;
-            while let Some(()) = update_rx.next().await {
-                let mut parser = parser.borrow_mut();
-                let total_scrollback = query_max_scrollback(&mut parser);
+    let reader_task = spawn_reader_task(update_rx, &state, platform);
+    let pty_task = spawn_pty_task(reader, update_tx, &state);
 
-                let mut buffer = buffer.borrow_mut();
-                let old_total_scrollback = buffer.total_scrollback;
-                let delta = total_scrollback.saturating_sub(old_total_scrollback);
-                parser.screen_mut().set_scrollback(buffer.scroll_offset);
-                let mut new_buffer =
-                    extract_buffer(&parser, buffer.scroll_offset, total_scrollback);
-                parser.screen_mut().set_scrollback(0);
-
-                new_buffer.selection = buffer.selection.take().map(|mut selection| {
-                    selection.start_scroll = selection.start_scroll.saturating_add(delta);
-                    selection.end_scroll = selection.end_scroll.saturating_add(delta);
-                    selection
-                });
-                *buffer = new_buffer;
-                platform.send(UserEvent::RequestRedraw);
-            }
-            // Channel closed — PTY exited
-            *writer.borrow_mut() = None;
-            closer_notifier.notify();
-            platform.send(UserEvent::RequestRedraw);
-        }
-    });
-
-    let pty_task = spawn_forever({
-        let writer = writer.clone();
-        let parser = parser.clone();
-        let output_notifier = output_notifier.clone();
-        let cwd = cwd.clone();
-        let title = title.clone();
-        let title_notifier = title_notifier.clone();
-        let clipboard_content = clipboard_content.clone();
-        let clipboard_notifier = clipboard_notifier.clone();
-        async move {
-            let mut tw_parser = TermwizParser::new();
-            loop {
-                let mut buf = [0u8; 4096];
-
-                match reader.read(&mut buf).await {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        let data = &buf[..n];
-
-                        parser.borrow_mut().process(data);
-
-                        // Use termwiz to detect terminal queries and OSC sequences
-                        let actions = tw_parser.parse_as_vec(data);
-                        let mut responses: Vec<Vec<u8>> = Vec::new();
-
-                        for action in actions {
-                            match action {
-                                Action::CSI(CSI::Device(dev)) => match *dev {
-                                    Device::RequestPrimaryDeviceAttributes => {
-                                        responses.push(b"\x1b[?62;22c".to_vec());
-                                    }
-                                    Device::RequestSecondaryDeviceAttributes => {
-                                        responses.push(b"\x1b[>0;0;0c".to_vec());
-                                    }
-                                    Device::StatusReport => {
-                                        responses.push(b"\x1b[0n".to_vec());
-                                    }
-                                    _ => {}
-                                },
-                                Action::CSI(CSI::Cursor(Cursor::RequestActivePositionReport)) => {
-                                    let p = parser.borrow();
-                                    let (row, col) = p.screen().cursor_position();
-                                    let response = format!("\x1b[{};{}R", row + 1, col + 1);
-                                    responses.push(response.into_bytes());
-                                }
-                                Action::OperatingSystemCommand(osc) => match *osc {
-                                    OperatingSystemCommand::CurrentWorkingDirectory(url) => {
-                                        // Strip file:// prefix if present
-                                        let path =
-                                            if let Some(stripped) = url.strip_prefix("file://") {
-                                                // file:///path or file://hostname/path
-                                                if let Some(rest) = stripped.strip_prefix('/') {
-                                                    PathBuf::from(format!("/{rest}"))
-                                                } else if let Some((_host, path)) =
-                                                    stripped.split_once('/')
-                                                {
-                                                    PathBuf::from(format!("/{path}"))
-                                                } else {
-                                                    PathBuf::from(stripped)
-                                                }
-                                            } else {
-                                                PathBuf::from(url)
-                                            };
-                                        *cwd.borrow_mut() = Some(path);
-                                    }
-                                    OperatingSystemCommand::SetWindowTitle(t)
-                                    | OperatingSystemCommand::SetIconNameAndWindowTitle(t) => {
-                                        *title.borrow_mut() = Some(t);
-                                        title_notifier.notify();
-                                    }
-                                    OperatingSystemCommand::SetSelection(_sel, text) => {
-                                        *clipboard_content.borrow_mut() = Some(text);
-                                        clipboard_notifier.notify();
-                                    }
-                                    _ => {}
-                                },
-                                _ => {}
-                            }
-                        }
-
-                        if !responses.is_empty()
-                            && let Some(writer) = &mut *writer.borrow_mut()
-                        {
-                            for response in responses {
-                                let _ = writer.write_all(&response);
-                            }
-                            let _ = writer.flush();
-                        }
-
-                        let _ = update_tx.unbounded_send(());
-                        output_notifier.notify();
-                    }
-                    Err(_) => break,
-                }
-            }
-        }
-    });
+    let TerminalState {
+        buffer,
+        parser,
+        writer,
+        closer_notifier,
+        output_notifier,
+        title_notifier,
+        cwd,
+        title,
+        clipboard_content,
+        clipboard_notifier,
+    } = state;
 
     Ok(TerminalHandle {
         closer_notifier: closer_notifier.clone(),
@@ -317,8 +391,14 @@ mod tests {
         let pid = child.process_id().expect("process_id") as libc::pid_t;
 
         let raw_fd = pair.master.as_raw_fd().expect("as_raw_fd");
+        // SAFETY: `raw_fd` is a valid, open pty master descriptor owned by
+        // `pair.master` for the scope of this test; `dup()` only reads it and
+        // returns a new, independent descriptor on success.
         let duped = unsafe { libc::dup(raw_fd) };
         assert!(duped >= 0, "dup failed");
+        // SAFETY: `duped` was just returned by the successful `dup()` above,
+        // so it is a valid, open, and otherwise-unowned descriptor; wrapping
+        // it in an `OwnedFd` gives it exactly one owner.
         let failing_master = RawFdMasterPty::from_owned_fd(unsafe { OwnedFd::from_raw_fd(duped) });
         let _pre_taken_writer = failing_master.take_writer().expect("first take_writer");
 
@@ -332,6 +412,9 @@ mod tests {
         // orphaned/zombie process: waiting on its pid now must report ECHILD
         // (no such child — it was already reaped by our cleanup).
         let mut status = 0;
+        // SAFETY: `pid` is a valid pid obtained above and `status` is a
+        // valid, live mutable local; `waitpid()` only reads `pid` and writes
+        // through `status` for the duration of this call.
         let wait_result = unsafe { libc::waitpid(pid, &mut status, 0) };
         assert_eq!(wait_result, -1, "child should already be reaped");
         assert_eq!(

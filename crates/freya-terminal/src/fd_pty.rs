@@ -49,6 +49,9 @@ impl MasterPty for RawFdMasterPty {
             ws_xpixel: size.pixel_width,
             ws_ypixel: size.pixel_height,
         };
+        // SAFETY: `self.fd` is a valid, open descriptor owned by `self` for
+        // the duration of this call; `ws` is a fully-initialized, live local
+        // and `TIOCSWINSZ` only reads through the pointer for the call.
         if unsafe { libc::ioctl(self.fd.as_raw_fd(), libc::TIOCSWINSZ as _, &ws as *const _) } != 0
         {
             bail!(
@@ -60,7 +63,13 @@ impl MasterPty for RawFdMasterPty {
     }
 
     fn get_size(&self) -> Result<PtySize, anyhow::Error> {
+        // SAFETY: `libc::winsize` is a plain-old-data struct of integer
+        // fields, so an all-zero bit pattern is a valid value; it is fully
+        // overwritten by the ioctl below before being read.
         let mut ws: libc::winsize = unsafe { mem::zeroed() };
+        // SAFETY: `self.fd` is a valid, open descriptor owned by `self` for
+        // the duration of this call, and `ws` is a valid, live mutable
+        // local; `TIOCGWINSZ` only writes through the pointer for the call.
         if unsafe {
             libc::ioctl(
                 self.fd.as_raw_fd(),
@@ -83,10 +92,16 @@ impl MasterPty for RawFdMasterPty {
     }
 
     fn try_clone_reader(&self) -> Result<Box<dyn Read + Send>, anyhow::Error> {
+        // SAFETY: `self.fd` is a valid, open descriptor owned by `self` for
+        // the lifetime of this call; `dup()` only reads it and returns a new,
+        // independent descriptor on success (or -1 on failure, checked below).
         let duped = unsafe { libc::dup(self.fd.as_raw_fd()) };
         if duped < 0 {
             bail!("dup() failed: {:?}", std::io::Error::last_os_error());
         }
+        // SAFETY: `duped` was just returned by the successful `dup()` above,
+        // so it is a valid, open, and otherwise-unowned descriptor; wrapping
+        // it in a `File` gives it exactly one owner, which closes it on drop.
         Ok(Box::new(unsafe { File::from_raw_fd(duped) }))
     }
 
@@ -96,15 +111,24 @@ impl MasterPty for RawFdMasterPty {
         }
         // Ownership flag flips only after a successful dup so a failed dup does
         // not permanently poison the master (disposition fix for PR #3).
+        // SAFETY: `self.fd` is a valid, open descriptor owned by `self` for
+        // the lifetime of this call; `dup()` only reads it and returns a new,
+        // independent descriptor on success (or -1 on failure, checked below).
         let duped = unsafe { libc::dup(self.fd.as_raw_fd()) };
         if duped < 0 {
             bail!("dup() failed: {:?}", std::io::Error::last_os_error());
         }
         *self.took_writer.borrow_mut() = true;
+        // SAFETY: `duped` was just returned by the successful `dup()` above,
+        // so it is a valid, open, and otherwise-unowned descriptor; wrapping
+        // it in a `File` gives it exactly one owner, which closes it on drop.
         Ok(Box::new(unsafe { File::from_raw_fd(duped) }))
     }
 
     fn process_group_leader(&self) -> Option<libc::pid_t> {
+        // SAFETY: `self.fd` is a valid, open descriptor owned by `self` for
+        // the duration of this call; `tcgetpgrp()` only reads it and returns
+        // a pid or -1 on error.
         match unsafe { libc::tcgetpgrp(self.fd.as_raw_fd()) } {
             pid if pid > 0 => Some(pid),
             _ => None,
@@ -142,9 +166,15 @@ mod tests {
             .expect("openpty");
 
         let raw_fd = pair.master.as_raw_fd().expect("as_raw_fd");
+        // SAFETY: `raw_fd` is a valid, open pty master descriptor owned by
+        // `pair.master` for the scope of this test; `dup()` only reads it and
+        // returns a new, independent descriptor on success.
         let duped = unsafe { libc::dup(raw_fd) };
         assert!(duped >= 0, "dup failed");
 
+        // SAFETY: `duped` was just returned by the successful `dup()` above,
+        // so it is a valid, open, and otherwise-unowned descriptor; wrapping
+        // it in an `OwnedFd` gives it exactly one owner.
         let adapter = RawFdMasterPty::from_owned_fd(unsafe { OwnedFd::from_raw_fd(duped) });
 
         adapter
@@ -170,9 +200,15 @@ mod tests {
         let pair = pty_system.openpty(PtySize::default()).expect("openpty");
 
         let raw_fd = pair.master.as_raw_fd().expect("as_raw_fd");
+        // SAFETY: `raw_fd` is a valid, open pty master descriptor owned by
+        // `pair.master` for the scope of this test; `dup()` only reads it and
+        // returns a new, independent descriptor on success.
         let duped = unsafe { libc::dup(raw_fd) };
         assert!(duped >= 0);
 
+        // SAFETY: `duped` was just returned by the successful `dup()` above,
+        // so it is a valid, open, and otherwise-unowned descriptor; wrapping
+        // it in an `OwnedFd` gives it exactly one owner.
         let adapter = RawFdMasterPty::from_owned_fd(unsafe { OwnedFd::from_raw_fd(duped) });
 
         let _reader = adapter.try_clone_reader().expect("try_clone_reader");
@@ -193,10 +229,23 @@ mod tests {
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(PtySize::default()).expect("openpty");
         let raw_fd = pair.master.as_raw_fd().expect("as_raw_fd");
+        // SAFETY: `raw_fd` is a valid, open pty master descriptor owned by
+        // `pair.master` for the scope of this test; `dup()` only reads it and
+        // returns a new, independent descriptor on success.
         let duped = unsafe { libc::dup(raw_fd) };
         assert!(duped >= 0);
+        // SAFETY: `duped` is a valid, open descriptor from the `dup()` above
+        // that is not yet owned by anything else (not wrapped into an
+        // `OwnedFd` yet), so closing it directly here is sound; this
+        // deliberately makes the fd number stale before it is wrapped below,
+        // which is exactly the failure this test wants to exercise.
         // Close the duped fd before wrapping so dup() inside take_writer fails.
         unsafe { libc::close(duped) };
+        // SAFETY: `duped` is a valid (if now-stale) fd number that is not
+        // owned by anything else; wrapping it in an `OwnedFd` gives it
+        // exactly one owner. The adapter is `mem::forget`'d below instead of
+        // dropped normally, so this deliberately-invalid fd is never
+        // double-closed.
         let adapter = RawFdMasterPty::from_owned_fd(unsafe { OwnedFd::from_raw_fd(duped) });
         assert!(adapter.take_writer().is_err());
         // Flag must remain false so a second attempt is still a "dup failed"
@@ -244,8 +293,14 @@ mod tests {
         let pid = child.process_id().expect("process_id") as libc::pid_t;
 
         let raw_fd = pair.master.as_raw_fd().expect("as_raw_fd");
+        // SAFETY: `raw_fd` is a valid, open pty master descriptor owned by
+        // `pair.master` for the scope of this test; `dup()` only reads it and
+        // returns a new, independent descriptor on success.
         let duped = unsafe { libc::dup(raw_fd) };
         assert!(duped >= 0, "dup failed");
+        // SAFETY: `duped` was just returned by the successful `dup()` above,
+        // so it is a valid, open, and otherwise-unowned descriptor; wrapping
+        // it in an `OwnedFd` gives it exactly one owner.
         let adapter = RawFdMasterPty::from_owned_fd(unsafe { OwnedFd::from_raw_fd(duped) });
 
         adapter
@@ -266,6 +321,9 @@ mod tests {
         // Fully reaped: a further wait on this pid must report ECHILD (no
         // unreaped child left behind), not the process still being alive.
         let mut status = 0;
+        // SAFETY: `pid` is a valid pid obtained above and `status` is a
+        // valid, live mutable local; `waitpid()` only reads `pid` and writes
+        // through `status` for the duration of this call.
         let wait_result = unsafe { libc::waitpid(pid, &mut status, 0) };
         assert_eq!(wait_result, -1, "child should already be reaped");
         assert_eq!(
@@ -292,8 +350,14 @@ mod tests {
         let pid = child.process_id().expect("process_id") as libc::pid_t;
 
         let raw_fd = pair.master.as_raw_fd().expect("as_raw_fd");
+        // SAFETY: `raw_fd` is a valid, open pty master descriptor owned by
+        // `pair.master` for the scope of this test; `dup()` only reads it and
+        // returns a new, independent descriptor on success.
         let duped = unsafe { libc::dup(raw_fd) };
         assert!(duped >= 0, "dup failed");
+        // SAFETY: `duped` was just returned by the successful `dup()` above,
+        // so it is a valid, open, and otherwise-unowned descriptor; wrapping
+        // it in an `OwnedFd` gives it exactly one owner.
         let adapter = RawFdMasterPty::from_owned_fd(unsafe { OwnedFd::from_raw_fd(duped) });
 
         assert_eq!(adapter.process_group_leader(), Some(pid));
