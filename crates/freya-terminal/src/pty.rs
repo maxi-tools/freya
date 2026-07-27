@@ -57,6 +57,24 @@ pub(crate) fn extract_buffer(
     }
 }
 
+/// Attach a freshly spawned child to its master, wiring up the shared
+/// terminal lifecycle.
+///
+/// If setup fails (e.g. a failed `take_writer()`/`try_clone_reader()`
+/// `dup()`), the already-spawned child is killed and reaped here so it isn't
+/// left orphaned/zombied by the early return.
+fn attach_spawned_child(
+    id: TerminalId,
+    master: Box<dyn MasterPty + Send>,
+    mut child: Box<dyn portable_pty::Child + Send + Sync>,
+    scrollback_size: usize,
+) -> Result<TerminalHandle, TerminalError> {
+    setup_terminal_from_master(id, master, scrollback_size).inspect_err(|_| {
+        let _ = child.kill();
+        let _ = child.wait();
+    })
+}
+
 /// Spawn a PTY and return a TerminalHandle.
 pub(crate) fn spawn_pty(
     id: TerminalId,
@@ -66,13 +84,14 @@ pub(crate) fn spawn_pty(
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize::default())
-        .map_err(|_| TerminalError::NotInitialized)?;
+        .map_err(|e| TerminalError::PtyError(e.to_string()))?;
 
-    pair.slave
+    let child = pair
+        .slave
         .spawn_command(command)
-        .map_err(|_| TerminalError::NotInitialized)?;
+        .map_err(|e| TerminalError::PtyError(e.to_string()))?;
 
-    setup_terminal_from_master(id, pair.master, scrollback_size)
+    attach_spawned_child(id, pair.master, child, scrollback_size)
 }
 
 /// Wire up a [`MasterPty`] (reader, writer, async tasks) into a [`TerminalHandle`].
@@ -99,12 +118,12 @@ pub(crate) fn setup_terminal_from_master(
 
     let master_writer = master
         .take_writer()
-        .map_err(|_| TerminalError::NotInitialized)?;
+        .map_err(|e| TerminalError::PtyError(e.to_string()))?;
     *writer.borrow_mut() = Some(master_writer);
 
     let reader = master
         .try_clone_reader()
-        .map_err(|_| TerminalError::NotInitialized)?;
+        .map_err(|e| TerminalError::PtyError(e.to_string()))?;
     let mut reader = blocking::Unblock::new(reader);
 
     let master: Rc<RefCell<Box<dyn MasterPty + Send>>> = Rc::new(RefCell::new(master));
@@ -267,4 +286,55 @@ pub(crate) fn setup_terminal_from_master(
         scroll_velocity: Rc::new(RefCell::new(0.0)),
         scroll_accumulator: Rc::new(RefCell::new(0.0)),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::io::{FromRawFd, OwnedFd};
+
+    use super::*;
+    use crate::fd_pty::RawFdMasterPty;
+
+    #[test]
+    fn attach_spawned_child_kills_and_reaps_child_when_setup_fails() {
+        // Real child, but a master whose writer was already taken, so
+        // `setup_terminal_from_master`'s `take_writer()` call fails
+        // deterministically — this is the failpoint-on-spawn scenario. This
+        // keeps the underlying fd valid throughout (only closed once, on
+        // drop) rather than forcing a `dup()` failure via an already-closed
+        // fd, which would make the master's own cleanup trip the OS's
+        // double-close safety abort — a real bug the `OwnedFd` switch is
+        // meant to catch, not something a test should trigger on purpose.
+        let pty_system = native_pty_system();
+        let pair = pty_system.openpty(PtySize::default()).expect("openpty");
+
+        let mut cmd = CommandBuilder::new("sleep");
+        cmd.arg("5");
+        let child = pair.slave.spawn_command(cmd).expect("spawn_command");
+        let pid = child.process_id().expect("process_id") as libc::pid_t;
+
+        let raw_fd = pair.master.as_raw_fd().expect("as_raw_fd");
+        let duped = unsafe { libc::dup(raw_fd) };
+        assert!(duped >= 0, "dup failed");
+        let failing_master = RawFdMasterPty::from_owned_fd(unsafe { OwnedFd::from_raw_fd(duped) });
+        let _pre_taken_writer = failing_master.take_writer().expect("first take_writer");
+
+        let result = attach_spawned_child(TerminalId::new(), Box::new(failing_master), child, 100);
+        assert!(
+            result.is_err(),
+            "setup must fail against a master whose writer was already taken"
+        );
+
+        // The child must have been killed and reaped rather than left an
+        // orphaned/zombie process: waiting on its pid now must report ECHILD
+        // (no such child — it was already reaped by our cleanup).
+        let mut status = 0;
+        let wait_result = unsafe { libc::waitpid(pid, &mut status, 0) };
+        assert_eq!(wait_result, -1, "child should already be reaped");
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::ECHILD),
+            "expected ECHILD: no unreaped child should remain for this pid"
+        );
+    }
 }
