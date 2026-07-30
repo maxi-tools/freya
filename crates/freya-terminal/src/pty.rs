@@ -115,8 +115,10 @@ struct TerminalState {
 /// Allocate the buffer, parser, writer cell, and notifiers shared by the
 /// reader and PTY tasks and by the resulting [`TerminalHandle`].
 fn init_terminal_state(scrollback_size: usize, size: PtySize) -> TerminalState {
-    let rows = size.rows.max(1) as u16;
-    let cols = size.cols.max(1) as u16;
+    // Zero is "unset" on many PTY masters, not a 1x1 map. Fall back to the
+    // historical default instead of max(1) (#8 cubic P2).
+    let rows = if size.rows == 0 { 24 } else { size.rows };
+    let cols = if size.cols == 0 { 80 } else { size.cols };
     TerminalState {
         buffer: Rc::new(RefCell::new(TerminalBuffer::default())),
         parser: Rc::new(RefCell::new(Parser::new(rows, cols, scrollback_size))),
@@ -318,12 +320,17 @@ pub(crate) fn setup_terminal_from_master(
 
     // Seed the VT parser from the master's real geometry before any reader
     // task starts (daemon-provided fds may not be 24x80).
-    let size = master.get_size().unwrap_or(PtySize {
-        rows: 24,
-        cols: 80,
-        pixel_width: 0,
-        pixel_height: 0,
-    });
+    // Treat missing or zero-dimension geometry as unset → 24x80 default.
+    let size = master
+        .get_size()
+        .ok()
+        .filter(|s| s.rows > 0 && s.cols > 0)
+        .unwrap_or(PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        });
     let state = init_terminal_state(scrollback_size, size);
     let (reader, master) = wire_master_io(master, &state.writer)?;
 
