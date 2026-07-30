@@ -15,6 +15,23 @@ use std::{
 use anyhow::bail;
 use portable_pty::{MasterPty, PtySize};
 
+#[cfg(test)]
+static FORCE_DUP_FAIL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Duplicate a file descriptor. Tests may force failure via [`FORCE_DUP_FAIL`]
+/// so poison-flag coverage does not require wrapping a closed fd in `OwnedFd`.
+fn dup_fd(fd: RawFd) -> i32 {
+    #[cfg(test)]
+    {
+        use std::sync::atomic::Ordering;
+        if FORCE_DUP_FAIL.load(Ordering::SeqCst) {
+            return -1;
+        }
+    }
+    // SAFETY: caller must pass a valid open fd; on failure returns -1.
+    unsafe { libc::dup(fd) }
+}
+
 /// A [`MasterPty`] implementation backed by an owned file descriptor.
 ///
 /// Ownership is enforced by the type system rather than by a comment:
@@ -93,9 +110,9 @@ impl MasterPty for RawFdMasterPty {
 
     fn try_clone_reader(&self) -> Result<Box<dyn Read + Send>, anyhow::Error> {
         // SAFETY: `self.fd` is a valid, open descriptor owned by `self` for
-        // the lifetime of this call; `dup()` only reads it and returns a new,
+        // the lifetime of this call; `dup_fd` only reads it and returns a new,
         // independent descriptor on success (or -1 on failure, checked below).
-        let duped = unsafe { libc::dup(self.fd.as_raw_fd()) };
+        let duped = dup_fd(self.fd.as_raw_fd());
         if duped < 0 {
             bail!("dup() failed: {:?}", std::io::Error::last_os_error());
         }
@@ -112,9 +129,9 @@ impl MasterPty for RawFdMasterPty {
         // Ownership flag flips only after a successful dup so a failed dup does
         // not permanently poison the master (disposition fix for PR #3).
         // SAFETY: `self.fd` is a valid, open descriptor owned by `self` for
-        // the lifetime of this call; `dup()` only reads it and returns a new,
+        // the lifetime of this call; `dup_fd` only reads it and returns a new,
         // independent descriptor on success (or -1 on failure, checked below).
-        let duped = unsafe { libc::dup(self.fd.as_raw_fd()) };
+        let duped = dup_fd(self.fd.as_raw_fd());
         if duped < 0 {
             bail!("dup() failed: {:?}", std::io::Error::last_os_error());
         }
@@ -146,7 +163,7 @@ impl MasterPty for RawFdMasterPty {
 
 #[cfg(test)]
 mod tests {
-    use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+    use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
     use super::*;
 
@@ -219,54 +236,47 @@ mod tests {
 
     #[test]
     fn take_writer_failed_dup_does_not_poison_flag() {
-        // Closed fd: first take_writer must fail without setting took_writer,
-        // so a subsequent take_writer on a valid re-wrap path still works.
-        // Here we only assert the flag stays false after a failed dup on a
-        // deliberately invalid fd path by using a closed fd master.
+        // Force `dup` to fail without closing the underlying OwnedFd (cubic P2:
+        // wrapping a closed descriptor in OwnedFd is unsound if the number is reused).
+        use std::sync::atomic::Ordering;
         let _guard = crate::test_support::PTY_FD_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(PtySize::default()).expect("openpty");
         let raw_fd = pair.master.as_raw_fd().expect("as_raw_fd");
-        // SAFETY: `raw_fd` is a valid, open pty master descriptor owned by
-        // `pair.master` for the scope of this test; `dup()` only reads it and
-        // returns a new, independent descriptor on success.
+        // SAFETY: `raw_fd` is a valid open master owned by `pair.master`;
+        // `dup()` only reads it and returns an independent open descriptor.
         let duped = unsafe { libc::dup(raw_fd) };
         assert!(duped >= 0);
-        // SAFETY: `duped` is a valid, open descriptor from the `dup()` above
-        // that is not yet owned by anything else (not wrapped into an
-        // `OwnedFd` yet), so closing it directly here is sound; this
-        // deliberately makes the fd number stale before it is wrapped below,
-        // which is exactly the failure this test wants to exercise.
-        // Close the duped fd before wrapping so dup() inside take_writer fails.
-        unsafe { libc::close(duped) };
-        // SAFETY: `duped` is a valid (if now-stale) fd number that is not
-        // owned by anything else; wrapping it in an `OwnedFd` gives it
-        // exactly one owner. The adapter is `mem::forget`'d below instead of
-        // dropped normally, so this deliberately-invalid fd is never
-        // double-closed.
+        // SAFETY: `duped` is open and otherwise unowned; OwnedFd takes exclusive ownership.
         let adapter = RawFdMasterPty::from_owned_fd(unsafe { OwnedFd::from_raw_fd(duped) });
-        assert!(adapter.take_writer().is_err());
-        // Flag must remain false so a second attempt is still a "dup failed"
-        // rather than "cannot take writer more than once". Matched via `match`
-        // rather than `unwrap_err()` since the writer's success type (`Box<dyn
-        // Write + Send>`) has no `Debug` impl, so `unwrap_err()` would not
-        // compile (it requires `T: Debug` to format the `Ok` case on panic).
-        match adapter.take_writer() {
-            Ok(_) => panic!("expected dup() to keep failing on an already-closed fd"),
-            Err(err) => {
-                let err = err.to_string();
-                assert!(
-                    err.contains("dup()"),
-                    "expected dup failure after failed first take, got: {err}"
-                );
-            }
-        }
-        // Avoid double-close of already-closed fd in Drop: leak by forgetting
-        // would still close; Drop closes self.fd which is already closed — that
-        // is safe on Unix (close on invalid may EBADF). We accept that.
-        std::mem::forget(adapter);
+
+        FORCE_DUP_FAIL.store(true, Ordering::SeqCst);
+        let first = adapter.take_writer();
+        FORCE_DUP_FAIL.store(false, Ordering::SeqCst);
+        assert!(first.is_err(), "forced dup failure must error");
+        let err = first.err().unwrap().to_string();
+        assert!(
+            err.contains("dup()"),
+            "expected dup failure message, got: {err}"
+        );
+
+        // Flag must remain false so a subsequent real take_writer can still succeed.
+        let writer = adapter.take_writer();
+        assert!(
+            writer.is_ok(),
+            "take_writer after forced failure must not be poisoned: {err}",
+            err = writer
+                .as_ref()
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default()
+        );
+        assert!(
+            adapter.take_writer().is_err(),
+            "second successful take must still be once-only"
+        );
     }
 
     #[test]
