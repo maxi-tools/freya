@@ -16,7 +16,8 @@ use anyhow::bail;
 use portable_pty::{MasterPty, PtySize};
 
 #[cfg(test)]
-static FORCE_DUP_FAIL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static FORCE_DUP_FAIL: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// Duplicate a file descriptor. Tests may force failure via [`FORCE_DUP_FAIL`]
 /// so poison-flag coverage does not require wrapping a closed fd in `OwnedFd`.
@@ -36,8 +37,8 @@ fn dup_fd(fd: RawFd) -> i32 {
 ///
 /// Ownership is enforced by the type system rather than by a comment:
 /// constructing this struct consumes an [`OwnedFd`], so the compiler prevents
-/// the caller from using or closing the descriptor afterwards. It will be
-/// closed when this struct (and thus the `OwnedFd`) is dropped.
+/// the caller from using or closing the descriptor afterwards. It is closed
+/// when this struct (and thus the `OwnedFd`) is dropped.
 pub struct RawFdMasterPty {
     fd: OwnedFd,
     took_writer: RefCell<bool>,
@@ -46,10 +47,9 @@ pub struct RawFdMasterPty {
 impl RawFdMasterPty {
     /// Wrap an existing PTY master file descriptor, taking ownership of it.
     ///
-    /// Passing an [`OwnedFd`] transfers ownership by value — the compiler
-    /// prevents the caller from using or closing the descriptor afterwards —
-    /// so this constructor needs no `unsafe` and no separate ownership
-    /// documentation contract; the type itself mechanically enforces it.
+    /// Passing an [`OwnedFd`] transfers ownership by value, so the compiler
+    /// prevents the caller from using or closing the descriptor afterwards.
+    /// No separate ownership contract is needed; the type enforces it.
     pub fn from_owned_fd(fd: OwnedFd) -> Self {
         Self {
             fd,
@@ -126,8 +126,8 @@ impl MasterPty for RawFdMasterPty {
         if *self.took_writer.borrow() {
             bail!("cannot take writer more than once");
         }
-        // Ownership flag flips only after a successful dup so a failed dup does
-        // not permanently poison the master (disposition fix for PR #3).
+        // Flip the flag only after a successful dup so a failed dup does not
+        // permanently poison the master.
         // SAFETY: `self.fd` is a valid, open descriptor owned by `self` for
         // the lifetime of this call; `dup_fd` only reads it and returns a new,
         // independent descriptor on success (or -1 on failure, checked below).
@@ -163,9 +163,11 @@ impl MasterPty for RawFdMasterPty {
 
 #[cfg(test)]
 mod tests {
-    use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+    use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
 
-    use super::*;
+    use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
+
+    use crate::fd_pty::{FORCE_DUP_FAIL, RawFdMasterPty};
 
     #[test]
     fn resize_on_real_pty() {
@@ -236,8 +238,8 @@ mod tests {
 
     #[test]
     fn take_writer_failed_dup_does_not_poison_flag() {
-        // Force `dup` to fail without closing the underlying OwnedFd (cubic P2:
-        // wrapping a closed descriptor in OwnedFd is unsound if the number is reused).
+        // Force `dup` to fail without closing the underlying OwnedFd.
+        // Wrapping a closed descriptor in OwnedFd is unsound if the number is reused.
         use std::sync::atomic::Ordering;
         let _guard = crate::test_support::PTY_FD_TEST_LOCK
             .lock()

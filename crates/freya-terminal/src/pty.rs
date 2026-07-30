@@ -63,7 +63,7 @@ pub(crate) fn extract_buffer(
 /// If setup fails (e.g. a failed `take_writer()`/`try_clone_reader()`
 /// `dup()`), the already-spawned child is killed and reaped here so it isn't
 /// left orphaned/zombied by the early return.
-fn attach_spawned_child(
+pub(crate) fn attach_spawned_child(
     id: TerminalId,
     master: Box<dyn MasterPty + Send>,
     mut child: Box<dyn portable_pty::Child + Send + Sync>,
@@ -97,9 +97,8 @@ pub(crate) fn spawn_pty(
 /// Shared, ref-counted terminal state created before any I/O is wired up.
 ///
 /// Bundled into one struct purely to keep [`setup_terminal_from_master`]'s
-/// delegation to the helpers below manageable — this is a pure grouping of
-/// the same fields that used to be separate local variables, no behavior
-/// change.
+/// delegation to the helpers below manageable. Pure grouping of the same
+/// fields that used to be separate local variables; no behavior change.
 struct TerminalState {
     buffer: Rc<RefCell<TerminalBuffer>>,
     parser: Rc<RefCell<Parser>>,
@@ -115,10 +114,12 @@ struct TerminalState {
 
 /// Allocate the buffer, parser, writer cell, and notifiers shared by the
 /// reader and PTY tasks and by the resulting [`TerminalHandle`].
-fn init_terminal_state(scrollback_size: usize) -> TerminalState {
+fn init_terminal_state(scrollback_size: usize, size: PtySize) -> TerminalState {
+    let rows = size.rows.max(1) as u16;
+    let cols = size.cols.max(1) as u16;
     TerminalState {
         buffer: Rc::new(RefCell::new(TerminalBuffer::default())),
-        parser: Rc::new(RefCell::new(Parser::new(24, 80, scrollback_size))),
+        parser: Rc::new(RefCell::new(Parser::new(rows, cols, scrollback_size))),
         writer: Rc::new(RefCell::new(None)),
         closer_notifier: ArcNotify::new(),
         output_notifier: ArcNotify::new(),
@@ -192,7 +193,7 @@ fn spawn_reader_task(
             *buffer = new_buffer;
             platform.send(UserEvent::RequestRedraw);
         }
-        // Channel closed — PTY exited
+        // Channel closed: PTY exited
         *writer.borrow_mut() = None;
         closer_notifier.notify();
         platform.send(UserEvent::RequestRedraw);
@@ -315,7 +316,15 @@ pub(crate) fn setup_terminal_from_master(
 ) -> Result<TerminalHandle, TerminalError> {
     let (update_tx, update_rx) = futures_channel::mpsc::unbounded::<()>();
 
-    let state = init_terminal_state(scrollback_size);
+    // Seed the VT parser from the master's real geometry before any reader
+    // task starts (daemon-provided fds may not be 24x80).
+    let size = master.get_size().unwrap_or(PtySize {
+        rows: 24,
+        cols: 80,
+        pixel_width: 0,
+        pixel_height: 0,
+    });
+    let state = init_terminal_state(scrollback_size, size);
     let (reader, master) = wire_master_io(master, &state.writer)?;
 
     let platform = Platform::get();
@@ -362,23 +371,20 @@ pub(crate) fn setup_terminal_from_master(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
-    use std::os::unix::io::{FromRawFd, OwnedFd};
+    use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
 
-    use super::*;
+    use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
+
     use crate::fd_pty::RawFdMasterPty;
+    use crate::handle::TerminalId;
+    use crate::pty::{attach_spawned_child, setup_terminal_from_master};
 
     #[test]
     fn attach_spawned_child_kills_and_reaps_child_when_setup_fails() {
-        // Real child, but a master whose writer was already taken, so
-        // `setup_terminal_from_master`'s `take_writer()` call fails
-        // deterministically — this is the failpoint-on-spawn scenario. This
-        // keeps the underlying fd valid throughout (only closed once, on
-        // drop) rather than forcing a `dup()` failure via an already-closed
-        // fd, which would make the master's own cleanup trip the OS's
-        // double-close safety abort — a real bug the `OwnedFd` switch is
-        // meant to catch, not something a test should trigger on purpose.
+        // Real child with a master whose writer was already taken, so
+        // setup fails at take_writer without closing the underlying fd.
         let _guard = crate::test_support::PTY_FD_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -408,9 +414,7 @@ mod tests {
             "setup must fail against a master whose writer was already taken"
         );
 
-        // The child must have been killed and reaped rather than left an
-        // orphaned/zombie process: waiting on its pid now must report ECHILD
-        // (no such child — it was already reaped by our cleanup).
+        // Child must already be reaped: waitpid reports ECHILD.
         let mut status = 0;
         // SAFETY: `pid` is a valid pid obtained above and `status` is a
         // valid, live mutable local; `waitpid()` only reads `pid` and writes

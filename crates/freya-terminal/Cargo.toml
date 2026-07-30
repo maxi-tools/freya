@@ -39,7 +39,7 @@ futures-lite = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
-anyhow = "1.0"
+anyhow = { workspace = true }
 
 [dev-dependencies]
 freya = { path = "../freya" }
