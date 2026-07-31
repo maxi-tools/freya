@@ -227,9 +227,9 @@ impl ElementExt for SvgElement {
                     root.set_width(svg::Length::new(100., svg::LengthUnit::Percentage));
                 }
                 // Intrinsic absolute sizes are logical pixels; scale those to
-                // physical DPI. Relative units (e.g. 100%) must stay relative —
+                // physical DPI. Relative units (e.g. 100%) must stay relative:
                 // forcing PX turns percentage roots into fixed pixel boxes
-                // (#3 residual U2 / examples/ferris.svg).
+                // (see examples/ferris.svg).
                 Size::Inner => {
                     let w = root.width();
                     if matches!(w.unit, svg::LengthUnit::PX | svg::LengthUnit::Number) {
