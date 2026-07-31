@@ -150,14 +150,12 @@ impl RenderPipeline<'_> {
                     scale_factor: self.scale_factor,
                 };
 
-                hotpath::measure_block!("Element Render", {
-                    element.render(render_context);
-                });
-
+                // Establish glass/blur backdrop BEFORE element paint so the
+                // runtime filter samples the scene behind the panel, not the
+                // panel's own just-painted background (#3 residual U3).
                 if let Some(effect_state) = effect_state {
                     let visible_area = layout_node.visible_area();
                     let render_rect = element.render_rect(&visible_area, self.scale_factor as f32);
-                    // Apply glass or blur effect (glass includes its own blur)
                     if let Some(ref glass_filter) = effect_state.glass_filter {
                         let style = element.style();
                         let rec = SaveLayerRec::default()
@@ -194,6 +192,10 @@ impl RenderPipeline<'_> {
                         }
                     }
                 }
+
+                hotpath::measure_block!("Element Render", {
+                    element.render(render_context);
+                });
 
                 self.canvas.restore_to_count(layer);
             }
