@@ -244,12 +244,17 @@ pub(crate) fn setup_terminal_from_master(
                         output_notifier.notify();
                     }
                     // Nonblocking PTY OFD (daemon-supplied masters often set
-                    // O_NONBLOCK): idle is not EOF. Retry rather than killing
-                    // the reader task (#3 residual U1).
+                    // O_NONBLOCK on the shared open-file description): idle is
+                    // not EOF. `blocking::Unblock` returns immediately on
+                    // WouldBlock — back off so we do not busy-spin a pool worker.
                     Err(e)
                         if e.kind() == std::io::ErrorKind::WouldBlock
                             || e.kind() == std::io::ErrorKind::Interrupted =>
                     {
+                        let _ = blocking::unblock(|| {
+                            std::thread::sleep(std::time::Duration::from_millis(5));
+                        })
+                        .await;
                         continue;
                     }
                     Err(_) => break,

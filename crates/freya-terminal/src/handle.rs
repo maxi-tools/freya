@@ -380,10 +380,14 @@ impl TerminalHandle {
     }
 
     /// Write data to the PTY without resetting scroll or selection state.
+    ///
+    /// Retries `WouldBlock`/`Interrupted` so a daemon master whose shared OFD
+    /// has `O_NONBLOCK` cannot truncate a multi-chunk paste after a partial
+    /// write (plain `write_all` would surface the error with no safe retry).
     fn write_raw(&self, data: &[u8]) -> Result<(), TerminalError> {
         match &mut *self.writer.borrow_mut() {
             Some(w) => {
-                w.write_all(data)
+                write_all_retrying_nonblocking(w.as_mut(), data)
                     .map_err(|e| TerminalError::WriteError(e.to_string()))?;
                 w.flush()
                     .map_err(|e| TerminalError::WriteError(e.to_string()))?;
@@ -900,3 +904,49 @@ impl TerminalHandle {
         Some(lines.join("\n"))
     }
 }
+
+#[cfg(test)]
+mod write_retry_tests {
+    use super::write_all_retrying_nonblocking;
+    use std::io::{self, Write};
+
+    struct FlakyWriter {
+        calls: usize,
+        buf: Vec<u8>,
+    }
+
+    impl Write for FlakyWriter {
+        fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+            self.calls += 1;
+            if self.calls == 1 {
+                // Partial success (3 bytes), matching a nonblocking OFD that
+                // filled mid-write. Caller must resume at offset 3.
+                let n = data.len().min(3);
+                self.buf.extend_from_slice(&data[..n]);
+                return Ok(n);
+            }
+            if self.calls == 2 {
+                return Err(io::Error::new(io::ErrorKind::WouldBlock, "still full"));
+            }
+            let n = data.len();
+            self.buf.extend_from_slice(data);
+            Ok(n)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn write_all_retrying_nonblocking_resumes_after_would_block() {
+        let mut w = FlakyWriter {
+            calls: 0,
+            buf: Vec::new(),
+        };
+        write_all_retrying_nonblocking(&mut w, b"hello-world").expect("write");
+        assert_eq!(w.buf, b"hello-world");
+        assert!(w.calls >= 3, "expected retries, calls={}", w.calls);
+    }
+}
+
