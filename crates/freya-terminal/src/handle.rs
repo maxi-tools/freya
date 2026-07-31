@@ -1,8 +1,5 @@
 use std::{
-    cell::{
-        Ref,
-        RefCell,
-    },
+    cell::{Ref, RefCell},
     io::Write,
     path::PathBuf,
     rc::Rc,
@@ -11,41 +8,19 @@ use std::{
 
 use freya_core::{
     notify::ArcNotify,
-    prelude::{
-        Platform,
-        TaskHandle,
-        UseId,
-        UserEvent,
-    },
+    prelude::{Platform, TaskHandle, UseId, UserEvent},
 };
-use keyboard_types::{
-    Key,
-    Modifiers,
-    NamedKey,
-};
-use portable_pty::{
-    MasterPty,
-    PtySize,
-};
+use keyboard_types::{Key, Modifiers, NamedKey};
+use portable_pty::{MasterPty, PtySize};
 use vt100::Parser;
 
 use crate::{
-    buffer::{
-        TerminalBuffer,
-        TerminalSelection,
-    },
+    buffer::{TerminalBuffer, TerminalSelection},
     parser::{
-        TerminalMouseButton,
-        encode_mouse_move,
-        encode_mouse_press,
-        encode_mouse_release,
+        TerminalMouseButton, encode_mouse_move, encode_mouse_press, encode_mouse_release,
         encode_wheel_event,
     },
-    pty::{
-        extract_buffer,
-        query_max_scrollback,
-        spawn_pty,
-    },
+    pty::{extract_buffer, query_max_scrollback, spawn_pty},
 };
 
 /// Unique identifier for a terminal instance
@@ -327,6 +302,15 @@ impl TerminalHandle {
             let normalized = text.replace("\r\n", "\r").replace('\n', "\r");
             self.write_raw(normalized.as_bytes())?;
         }
+        // Match typing: clear selection, stamp write time, snap to bottom.
+        // paste uses write_raw so multiline bracketed sequences stay intact;
+        // still apply write()'s viewport side effects (#14 residual P2).
+        let mut buffer = self.buffer.borrow_mut();
+        buffer.selection = None;
+        buffer.scroll_offset = 0;
+        drop(buffer);
+        *self.last_write_time.borrow_mut() = Instant::now();
+        self.scroll_to_bottom();
         Ok(())
     }
 
@@ -793,9 +777,16 @@ impl TerminalHandle {
                 })
                 .collect();
 
-            // Strip trailing cell padding so it doesn't paste as blank lines.
+            // Strip trailing empty-cell padding so it doesn't paste as blank
+            // lines, but keep intentional trailing spaces (cells with contents)
+            // (#14 residual P2).
             if !is_single && !is_last {
-                line.truncate(line.trim_end_matches(' ').len());
+                let pad = cells
+                    .iter()
+                    .rev()
+                    .take_while(|cell| !cell.has_contents())
+                    .count();
+                line.truncate(line.len().saturating_sub(pad));
             }
 
             lines.push(line);
