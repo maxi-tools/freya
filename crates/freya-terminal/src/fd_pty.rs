@@ -76,15 +76,16 @@ impl RawFdMasterPty {
     /// # Safety
     /// The caller must ensure `fd` is a valid, open PTY master file descriptor
     /// and that ownership is being transferred to this struct (it will be closed
-    /// on drop).
-    pub unsafe fn from_fd(fd: RawFd) -> Self {
-        // Best-effort: if CLOEXEC cannot be set, still take ownership so the
-        // caller does not lose the fd; the flag is set when possible.
-        let _ = set_cloexec(fd);
-        Self {
+    /// on drop). On error, ownership is **not** taken and the caller remains
+    /// responsible for closing `fd`.
+    pub unsafe fn from_fd(fd: RawFd) -> Result<Self, anyhow::Error> {
+        // Fail closed: the public contract promises CLOEXEC so a later exec
+        // cannot inherit the master. Best-effort would silently break that.
+        set_cloexec(fd)?;
+        Ok(Self {
             fd,
             took_writer: RefCell::new(false),
-        }
+        })
     }
 }
 

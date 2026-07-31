@@ -76,15 +76,26 @@ impl Drop for TerminalCleaner {
 }
 
 
+/// Cap on consecutive WouldBlock/Interrupted spins before giving up.
+///
+/// At 1 ms per spin this is ~256 ms of pure stall. Progress (any Ok(n>0)) resets
+/// the counter so large writes that occasionally block still complete.
+const MAX_WRITE_STALL_SPINS: u32 = 256;
+
 /// Write the full buffer, retrying WouldBlock/Interrupted without rewinding.
 ///
 /// Unlike `write_all`, a partial success followed by WouldBlock resumes at the
 /// same offset so the already-written prefix is never duplicated.
+///
+/// Unbounded sleep-retry would freeze the terminal event loop when a daemon
+/// PTY stays full or has no reader; after [`MAX_WRITE_STALL_SPINS`] consecutive
+/// stalls this returns `WouldBlock` so the caller can surface the failure.
 pub(crate) fn write_all_retrying_nonblocking(
     w: &mut dyn Write,
     data: &[u8],
 ) -> std::io::Result<()> {
     let mut offset = 0usize;
+    let mut stall_spins = 0u32;
     while offset < data.len() {
         match w.write(&data[offset..]) {
             Ok(0) => {
@@ -93,11 +104,23 @@ pub(crate) fn write_all_retrying_nonblocking(
                     "PTY write returned 0 bytes",
                 ));
             }
-            Ok(n) => offset += n,
+            Ok(n) => {
+                offset += n;
+                stall_spins = 0;
+            }
             Err(e)
                 if e.kind() == std::io::ErrorKind::Interrupted
                     || e.kind() == std::io::ErrorKind::WouldBlock =>
             {
+                stall_spins += 1;
+                if stall_spins >= MAX_WRITE_STALL_SPINS {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::WouldBlock,
+                        format!(
+                            "PTY write stalled after {MAX_WRITE_STALL_SPINS} consecutive WouldBlock/Interrupted spins"
+                        ),
+                    ));
+                }
                 std::thread::sleep(std::time::Duration::from_millis(1));
             }
             Err(e) => return Err(e),
@@ -212,7 +235,8 @@ impl TerminalHandle {
         fd: std::os::unix::io::RawFd,
         scrollback_length: Option<usize>,
     ) -> Result<Self, TerminalError> {
-        let master = unsafe { crate::fd_pty::RawFdMasterPty::from_fd(fd) };
+        let master = unsafe { crate::fd_pty::RawFdMasterPty::from_fd(fd) }
+            .map_err(|e| TerminalError::PtyError(e.to_string()))?;
         setup_terminal_from_master(id, Box::new(master), scrollback_length.unwrap_or(1000))
     }
 
@@ -978,6 +1002,32 @@ mod write_retry_tests {
         write_all_retrying_nonblocking(&mut w, b"hello-world").expect("write");
         assert_eq!(w.buf, b"hello-world");
         assert!(w.calls >= 3, "expected retries, calls={}", w.calls);
+    }
+
+    struct AlwaysBlockWriter {
+        calls: usize,
+    }
+
+    impl Write for AlwaysBlockWriter {
+        fn write(&mut self, _data: &[u8]) -> io::Result<usize> {
+            self.calls += 1;
+            Err(io::Error::new(io::ErrorKind::WouldBlock, "full"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn write_all_retrying_nonblocking_bounds_would_block_spins() {
+        // Permanent WouldBlock must not freeze the terminal event loop.
+        // Bound is MAX_WRITE_STALL_SPINS (256 × 1 ms ≈ 256 ms).
+        let mut w = AlwaysBlockWriter { calls: 0 };
+        let err = write_all_retrying_nonblocking(&mut w, b"x")
+            .expect_err("must not spin forever on permanent WouldBlock");
+        assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
+        assert_eq!(w.calls, 256, "should stop after MAX_WRITE_STALL_SPINS");
     }
 }
 
