@@ -244,7 +244,10 @@ impl ElementExt for SvgElement {
                 _ => {}
             }
             if let Some(stroke_width) = self.stroke_width {
-                root.set_stroke_width(svg::Length::new(stroke_width, svg::LengthUnit::PX));
+                root.set_stroke_width(svg::Length::new(
+                    stroke_width * context.scale_factor as f32,
+                    svg::LengthUnit::PX,
+                ));
             }
             Some((
                 Size2D::new(root.width().value, root.height().value),
@@ -291,7 +294,10 @@ impl ElementExt for SvgElement {
             root.set_stroke(svg::Paint::from_color(stroke.into()));
         }
         if let Some(stroke_width) = self.stroke_width {
-            root.set_stroke_width(svg::Length::new(stroke_width, svg::LengthUnit::PX));
+            root.set_stroke_width(svg::Length::new(
+                stroke_width * context.scale_factor as f32,
+                svg::LengthUnit::PX,
+            ));
         }
         svg_dom.render(context.canvas);
         context.canvas.restore();
