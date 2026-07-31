@@ -17,7 +17,8 @@ use vt100::Parser;
 use crate::{
     buffer::TerminalBuffer,
     handle::{
-        write_all_retrying_nonblocking, TerminalCleaner, TerminalError, TerminalHandle, TerminalId,
+        TerminalCleaner, TerminalError, TerminalHandle, TerminalId,
+        write_all_retrying_nonblocking,
     },
 };
 
@@ -146,7 +147,7 @@ pub(crate) fn setup_terminal_from_master(
                 *buffer = new_buffer;
                 platform.send(UserEvent::RequestRedraw);
             }
-            // Channel closed: PTY exited
+            // Channel closed : PTY exited
             *writer.borrow_mut() = None;
             closer_notifier.notify();
             platform.send(UserEvent::RequestRedraw);
@@ -237,9 +238,10 @@ pub(crate) fn setup_terminal_from_master(
                             && let Some(writer) = &mut *writer.borrow_mut()
                         {
                             for response in responses {
-                                // Nonblocking shared OFD: retry partial writes
-                                // so DA/DSR replies are not dropped on WouldBlock.
-                                let _ = write_all_retrying_nonblocking(writer.as_mut(), &response);
+                                let _ = write_all_retrying_nonblocking(
+                                    writer.as_mut(),
+                                    &response,
+                                );
                             }
                             let _ = writer.flush();
                         }
@@ -250,7 +252,7 @@ pub(crate) fn setup_terminal_from_master(
                     // Nonblocking PTY OFD (daemon-supplied masters often set
                     // O_NONBLOCK on the shared open-file description): idle is
                     // not EOF. `blocking::Unblock` returns immediately on
-                    // WouldBlock: back off so we do not busy-spin a pool worker.
+                    // WouldBlock : back off so we do not busy-spin a pool worker.
                     Err(e)
                         if e.kind() == std::io::ErrorKind::WouldBlock
                             || e.kind() == std::io::ErrorKind::Interrupted =>

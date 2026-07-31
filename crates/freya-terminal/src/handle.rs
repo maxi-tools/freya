@@ -75,37 +75,6 @@ impl Drop for TerminalCleaner {
     }
 }
 
-
-/// Write the full buffer, retrying WouldBlock/Interrupted without rewinding.
-///
-/// Unlike `write_all`, a partial success followed by WouldBlock resumes at the
-/// same offset so the already-written prefix is never duplicated.
-pub(crate) fn write_all_retrying_nonblocking(
-    w: &mut dyn Write,
-    data: &[u8],
-) -> std::io::Result<()> {
-    let mut offset = 0usize;
-    while offset < data.len() {
-        match w.write(&data[offset..]) {
-            Ok(0) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::WriteZero,
-                    "PTY write returned 0 bytes",
-                ));
-            }
-            Ok(n) => offset += n,
-            Err(e)
-                if e.kind() == std::io::ErrorKind::Interrupted
-                    || e.kind() == std::io::ErrorKind::WouldBlock =>
-            {
-                std::thread::sleep(std::time::Duration::from_millis(1));
-            }
-            Err(e) => return Err(e),
-        }
-    }
-    Ok(())
-}
-
 /// Handle to a running terminal instance.
 ///
 /// The handle allows you to write input to the terminal and resize it.
@@ -934,6 +903,38 @@ impl TerminalHandle {
 
         Some(lines.join("\n"))
     }
+}
+
+
+/// Write the full buffer, retrying `WouldBlock` / `Interrupted`.
+///
+/// Daemon-supplied PTY masters often share an open-file description with
+/// `O_NONBLOCK`. Plain `write_all` surfaces `WouldBlock` after a partial write
+/// and drops the remainder; multi-chunk pastes and automatic DA/DSR replies both
+/// need the full payload delivered.
+pub(crate) fn write_all_retrying_nonblocking(
+    writer: &mut dyn std::io::Write,
+    mut data: &[u8],
+) -> std::io::Result<()> {
+    while !data.is_empty() {
+        match writer.write(data) {
+            Ok(0) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::WriteZero,
+                    "failed to write whole buffer",
+                ));
+            }
+            Ok(n) => data = &data[n..],
+            Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                // Yield so a full kernel buffer can drain without spinning.
+                std::thread::sleep(std::time::Duration::from_millis(1));
+                continue;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
