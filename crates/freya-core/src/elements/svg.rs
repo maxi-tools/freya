@@ -226,6 +226,12 @@ impl ElementExt for SvgElement {
                 Size::Fill => {
                     root.set_width(svg::Length::new(100., svg::LengthUnit::Percentage));
                 }
+                // Intrinsic document size is logical pixels; scale to physical DPI
+                // so default Size::Inner SVGs are not half-size on 2x displays.
+                Size::Inner => {
+                    let w = root.width().value * context.scale_factor as f32;
+                    root.set_width(svg::Length::new(w, svg::LengthUnit::PX));
+                }
                 _ => {}
             }
             match self.layout.height {
@@ -240,6 +246,10 @@ impl ElementExt for SvgElement {
                 }
                 Size::Fill => {
                     root.set_height(svg::Length::new(100., svg::LengthUnit::Percentage));
+                }
+                Size::Inner => {
+                    let h = root.height().value * context.scale_factor as f32;
+                    root.set_height(svg::Length::new(h, svg::LengthUnit::PX));
                 }
                 _ => {}
             }
