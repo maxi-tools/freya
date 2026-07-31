@@ -15,7 +15,7 @@ use std::{
 use anyhow::bail;
 use portable_pty::{MasterPty, PtySize};
 
-/// A [`MasterPty`] implementation backed by a borrowed raw file descriptor.
+/// A [`MasterPty`] implementation backed by an owned raw file descriptor.
 ///
 /// The fd is **owned** by this struct — it will be closed on [`Drop`].
 pub struct RawFdMasterPty {
@@ -91,11 +91,13 @@ impl MasterPty for RawFdMasterPty {
         if *self.took_writer.borrow() {
             bail!("cannot take writer more than once");
         }
-        *self.took_writer.borrow_mut() = true;
+        // Flip the flag only after a successful dup so a failed dup does not
+        // permanently poison the master (#3 residual).
         let duped = unsafe { libc::dup(self.fd) };
         if duped < 0 {
             bail!("dup() failed: {:?}", std::io::Error::last_os_error());
         }
+        *self.took_writer.borrow_mut() = true;
         Ok(Box::new(unsafe { File::from_raw_fd(duped) }))
     }
 
