@@ -756,7 +756,13 @@ where
 pub trait EffectExt: Sized {
     fn get_effect(&mut self) -> &mut EffectData;
 
-    fn effect(mut self, effect: EffectData) -> Self {
+    fn effect(mut self, mut effect: EffectData) -> Self {
+        // Public EffectData fields let callers set glass_filter with the default
+        // version 0; mint a unique version so PartialEq / DiffModifies::EFFECT see
+        // the change (builder `.glass_filter` already uses next_glass_filter_version).
+        if effect.glass_filter.is_some() && effect.glass_filter_version == 0 {
+            effect.glass_filter_version = crate::data::next_glass_filter_version();
+        }
         *self.get_effect() = effect;
         self
     }

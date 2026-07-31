@@ -84,6 +84,9 @@ impl PartialEq for EffectData {
             && self.scale == other.scale
             && self.opacity == other.opacity
             && self.blur == other.blur
+            // Presence + version: ImageFilter is not Eq; version is the content key,
+            // but None vs Some(at default version 0) must still differ.
+            && self.glass_filter.is_some() == other.glass_filter.is_some()
             && self.glass_filter_version == other.glass_filter_version
             && self.scrollable == other.scrollable
             && self.interactive == other.interactive
@@ -319,6 +322,7 @@ impl PartialEq for EffectState {
             && self.scale == other.scale
             && self.opacities == other.opacities
             && self.blur == other.blur
+            && self.glass_filter.is_some() == other.glass_filter.is_some()
             && self.glass_filter_version == other.glass_filter_version
             && self.scrollables == other.scrollables
             && self.interactive == other.interactive
