@@ -15,10 +15,13 @@ use std::{
 use anyhow::bail;
 use portable_pty::{MasterPty, PtySize};
 
-/// Duplicate `fd` with close-on-exec set, then ensure the shared open-file
-/// description is blocking so idle PTYs do not surface `WouldBlock` to the
-/// reader loop (#3 residual P1/P2).
-fn dup_cloexec_blocking(fd: RawFd) -> Result<RawFd, anyhow::Error> {
+/// Duplicate `fd` with close-on-exec set on the new descriptor only.
+///
+/// Does **not** change open-file description status flags (`O_NONBLOCK`, etc.):
+/// those are shared with every other holder of the same OFD (for example a
+/// daemon that still has a copy of the master). Callers that need a blocking
+/// reader should pass a blocking descriptor or handle `WouldBlock` themselves.
+pub(crate) fn dup_cloexec(fd: RawFd) -> Result<RawFd, anyhow::Error> {
     // SAFETY: caller must pass a valid open fd; F_DUPFD_CLOEXEC returns a new
     // independent descriptor or -1.
     let duped = unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 0) };
@@ -28,30 +31,30 @@ fn dup_cloexec_blocking(fd: RawFd) -> Result<RawFd, anyhow::Error> {
             std::io::Error::last_os_error()
         );
     }
-    // O_NONBLOCK lives on the open-file description shared by all dups of the
-    // master; clear it so portable_pty/reader loops that treat WouldBlock as
-    // fatal do not tear down the terminal on idle.
-    // SAFETY: `duped` is a valid open descriptor we just created.
-    let flags = unsafe { libc::fcntl(duped, libc::F_GETFL) };
+    Ok(duped)
+}
+
+/// Set `FD_CLOEXEC` on an existing descriptor (per-fd flag, not OFD status).
+pub(crate) fn set_cloexec(fd: RawFd) -> Result<(), anyhow::Error> {
+    // SAFETY: `fd` is a live open descriptor at the ownership-transfer boundary.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
     if flags < 0 {
-        // SAFETY: close the failed-prep descriptor to avoid leaking it.
-        unsafe { libc::close(duped) };
         bail!(
-            "fcntl(F_GETFL) failed: {:?}",
+            "fcntl(F_GETFD) failed: {:?}",
             std::io::Error::last_os_error()
         );
     }
-    if flags & libc::O_NONBLOCK != 0 {
-        // SAFETY: clear O_NONBLOCK on a live open descriptor we own.
-        if unsafe { libc::fcntl(duped, libc::F_SETFL, flags & !libc::O_NONBLOCK) } != 0 {
-            unsafe { libc::close(duped) };
-            bail!(
-                "fcntl(F_SETFL clear O_NONBLOCK) failed: {:?}",
-                std::io::Error::last_os_error()
-            );
-        }
+    if flags & libc::FD_CLOEXEC != 0 {
+        return Ok(());
     }
-    Ok(duped)
+    // SAFETY: F_SETFD only touches per-descriptor flags for `fd`.
+    if unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } != 0 {
+        bail!(
+            "fcntl(F_SETFD FD_CLOEXEC) failed: {:?}",
+            std::io::Error::last_os_error()
+        );
+    }
+    Ok(())
 }
 
 /// A [`MasterPty`] implementation backed by an owned raw file descriptor.
@@ -65,11 +68,19 @@ pub struct RawFdMasterPty {
 impl RawFdMasterPty {
     /// Wrap an existing PTY master file descriptor.
     ///
+    /// Sets `FD_CLOEXEC` on the adopted descriptor so a later `exec` in this
+    /// process cannot leak the PTY master. Status flags on the open-file
+    /// description (`O_NONBLOCK`, etc.) are left unchanged so concurrent
+    /// holders of the same OFD are not disrupted.
+    ///
     /// # Safety
     /// The caller must ensure `fd` is a valid, open PTY master file descriptor
     /// and that ownership is being transferred to this struct (it will be closed
     /// on drop).
     pub unsafe fn from_fd(fd: RawFd) -> Self {
+        // Best-effort: if CLOEXEC cannot be set, still take ownership so the
+        // caller does not lose the fd; the flag is set when possible.
+        let _ = set_cloexec(fd);
         Self {
             fd,
             took_writer: RefCell::new(false),
@@ -119,7 +130,7 @@ impl MasterPty for RawFdMasterPty {
     }
 
     fn try_clone_reader(&self) -> Result<Box<dyn Read + Send>, anyhow::Error> {
-        let duped = dup_cloexec_blocking(self.fd)?;
+        let duped = dup_cloexec(self.fd)?;
         Ok(Box::new(unsafe { File::from_raw_fd(duped) }))
     }
 
@@ -128,8 +139,8 @@ impl MasterPty for RawFdMasterPty {
             bail!("cannot take writer more than once");
         }
         // Flip the flag only after a successful dup so a failed dup does not
-        // permanently poison the master (#3 residual).
-        let duped = dup_cloexec_blocking(self.fd)?;
+        // permanently poison the master.
+        let duped = dup_cloexec(self.fd)?;
         *self.took_writer.borrow_mut() = true;
         Ok(Box::new(unsafe { File::from_raw_fd(duped) }))
     }
@@ -152,8 +163,9 @@ impl MasterPty for RawFdMasterPty {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use portable_pty::{PtySize, native_pty_system};
+    use crate::fd_pty::{dup_cloexec, set_cloexec, RawFdMasterPty};
+    use portable_pty::{native_pty_system, MasterPty, PtySize};
+    use std::os::unix::io::AsRawFd;
 
     fn open_adapter() -> (portable_pty::PtyPair, RawFdMasterPty) {
         let pty_system = native_pty_system();
@@ -168,6 +180,13 @@ mod tests {
         let raw_fd = pair.master.as_raw_fd().expect("as_raw_fd");
         let duped = unsafe { libc::dup(raw_fd) };
         assert!(duped >= 0, "dup failed");
+        // Clear CLOEXEC so from_fd must re-apply it.
+        let flags = unsafe { libc::fcntl(duped, libc::F_GETFD) };
+        assert!(flags >= 0);
+        assert_eq!(
+            unsafe { libc::fcntl(duped, libc::F_SETFD, flags & !libc::FD_CLOEXEC) },
+            0
+        );
         let adapter = unsafe { RawFdMasterPty::from_fd(duped) };
         (pair, adapter)
     }
@@ -197,30 +216,46 @@ mod tests {
     }
 
     #[test]
-    fn clones_set_cloexec_and_clear_nonblock() {
+    fn from_fd_sets_cloexec_on_adopted_descriptor() {
         let (_pair, adapter) = open_adapter();
-        // Mark the master ofd non-blocking; clones must clear it.
+        let fd = adapter.as_raw_fd().expect("fd");
+        let fd_flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+        assert!(fd_flags >= 0);
+        assert_ne!(
+            fd_flags & libc::FD_CLOEXEC,
+            0,
+            "adopted master must have FD_CLOEXEC"
+        );
+    }
+
+    #[test]
+    fn clones_set_cloexec_without_mutating_shared_status_flags() {
+        let (_pair, adapter) = open_adapter();
+        // Mark the master OFD non-blocking; clones must NOT clear it (shared OFD).
         let flags = unsafe { libc::fcntl(adapter.as_raw_fd().expect("fd"), libc::F_GETFL) };
         assert!(flags >= 0);
         assert_eq!(
-            unsafe { libc::fcntl(adapter.as_raw_fd().expect("fd"), libc::F_SETFL, flags | libc::O_NONBLOCK) },
+            unsafe {
+                libc::fcntl(
+                    adapter.as_raw_fd().expect("fd"),
+                    libc::F_SETFL,
+                    flags | libc::O_NONBLOCK,
+                )
+            },
             0
         );
 
-        let reader = adapter.try_clone_reader().expect("reader");
-        // Drop the boxed reader after inspecting its fd via as_raw_fd on File.
-        // We re-dup via try_clone path and check the master ofd is now blocking.
-        drop(reader);
+        let _reader = adapter.try_clone_reader().expect("reader");
         let flags_after = unsafe { libc::fcntl(adapter.as_raw_fd().expect("fd"), libc::F_GETFL) };
         assert!(flags_after >= 0);
-        assert_eq!(
+        assert_ne!(
             flags_after & libc::O_NONBLOCK,
             0,
-            "clone path must clear O_NONBLOCK on the shared open-file description"
+            "clone path must not clear O_NONBLOCK on the shared open-file description"
         );
 
         // Fresh clone: FD_CLOEXEC must be set on the duplicate.
-        let duped = dup_cloexec_blocking(adapter.as_raw_fd().expect("fd")).expect("dup_cloexec");
+        let duped = dup_cloexec(adapter.as_raw_fd().expect("fd")).expect("dup_cloexec");
         let fd_flags = unsafe { libc::fcntl(duped, libc::F_GETFD) };
         assert!(fd_flags >= 0);
         assert_ne!(
@@ -229,5 +264,13 @@ mod tests {
             "duplicate must have FD_CLOEXEC"
         );
         unsafe { libc::close(duped) };
+    }
+
+    #[test]
+    fn set_cloexec_is_idempotent() {
+        let (_pair, adapter) = open_adapter();
+        let fd = adapter.as_raw_fd().expect("fd");
+        set_cloexec(fd).expect("first");
+        set_cloexec(fd).expect("second");
     }
 }
