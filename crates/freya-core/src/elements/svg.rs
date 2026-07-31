@@ -229,7 +229,7 @@ impl ElementExt for SvgElement {
                 // Intrinsic absolute sizes are logical pixels; scale those to
                 // physical DPI. Relative units (e.g. 100%) must stay relative:
                 // forcing PX turns percentage roots into fixed pixel boxes
-                // (see examples/ferris.svg).
+                // (examples/ferris.svg).
                 Size::Inner => {
                     let w = root.width();
                     if matches!(w.unit, svg::LengthUnit::PX | svg::LengthUnit::Number) {
