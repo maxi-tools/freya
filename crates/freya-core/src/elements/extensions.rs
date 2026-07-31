@@ -773,7 +773,7 @@ pub trait EffectExt: Sized {
 
     fn glass_filter(mut self, filter: freya_engine::prelude::ImageFilter) -> Self {
         let effect = self.get_effect();
-        effect.glass_filter_version = effect.glass_filter_version.wrapping_add(1);
+        effect.glass_filter_version = crate::data::next_glass_filter_version();
         effect.glass_filter = Some(filter);
         self
     }

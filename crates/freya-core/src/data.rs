@@ -3,6 +3,7 @@ use std::{
     hash::Hash,
     ops::{Deref, DerefMut},
     rc::Rc,
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 use torin::{prelude::Area, torin::Torin};
@@ -50,6 +51,16 @@ impl DerefMut for LayoutData {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.layout
     }
+}
+
+/// Process-wide counter so each `.glass_filter(...)` builder call gets a unique
+/// version even when EffectData is reconstructed from defaults every render.
+/// Comparing only a per-instance counter misses real filter changes (#3 residual).
+static GLASS_FILTER_VERSION_EPOCH: AtomicU64 = AtomicU64::new(1);
+
+/// Next unique glass-filter version for EffectData equality / UI diffing.
+pub fn next_glass_filter_version() -> u64 {
+    GLASS_FILTER_VERSION_EPOCH.fetch_add(1, Ordering::Relaxed)
 }
 
 #[derive(Debug, Default, Clone)]
