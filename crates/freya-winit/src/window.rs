@@ -139,8 +139,12 @@ impl AppWindow {
         }
         #[cfg(target_os = "linux")]
         if let Some(app_id) = window_config.app_id.take() {
-            use winit::platform::wayland::WindowAttributesExtWayland;
-            window_attributes = window_attributes.with_name(&app_id, &app_id);
+            // Apply on both backends: Wayland uses app_id; X11 uses WM_CLASS
+            // via with_name so desktop identity/grouping works on either session.
+            use winit::platform::wayland::WindowAttributesExtWayland as WaylandExt;
+            use winit::platform::x11::WindowAttributesExtX11 as X11Ext;
+            window_attributes = WaylandExt::with_name(window_attributes, &app_id, &app_id);
+            window_attributes = X11Ext::with_name(window_attributes, &app_id, &app_id);
         }
         if let Some(window_attributes_hook) = window_config.window_attributes_hook.take() {
             window_attributes = window_attributes_hook(window_attributes, active_event_loop);
