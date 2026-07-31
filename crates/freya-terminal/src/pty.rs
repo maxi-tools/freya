@@ -243,6 +243,15 @@ pub(crate) fn setup_terminal_from_master(
                         let _ = update_tx.unbounded_send(());
                         output_notifier.notify();
                     }
+                    // Nonblocking PTY OFD (daemon-supplied masters often set
+                    // O_NONBLOCK): idle is not EOF. Retry rather than killing
+                    // the reader task (#3 residual U1).
+                    Err(e)
+                        if e.kind() == std::io::ErrorKind::WouldBlock
+                            || e.kind() == std::io::ErrorKind::Interrupted =>
+                    {
+                        continue;
+                    }
                     Err(_) => break,
                 }
             }
