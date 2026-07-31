@@ -1,5 +1,5 @@
 use freya_engine::prelude::{
-    Canvas, ClipOp, FontCollection, FontMgr, SaveLayerRec, SkMatrix, SkPoint, blur,
+    Canvas, FontCollection, FontMgr, SaveLayerRec, SkMatrix, SkPoint, blur,
 };
 
 use crate::{
@@ -152,24 +152,25 @@ impl RenderPipeline<'_> {
 
                 // Establish glass/blur backdrop BEFORE element paint so the
                 // runtime filter samples the scene behind the panel, not the
-                // panel's own just-painted background (#3 residual U3).
+                // panel's own just-painted background.
+                //
+                // Do not clip_rrect around these layers: a rounded clip stays
+                // active through `element.render` and removes outer shadows /
+                // outer-aligned borders. SaveLayerRec bounds still limit the
+                // filter sample. Glass and blur may both be set; they nest as
+                // stacked save_layers (not exclusive).
                 if let Some(effect_state) = effect_state {
                     let visible_area = layout_node.visible_area();
                     let render_rect = element.render_rect(&visible_area, self.scale_factor as f32);
+
                     if let Some(ref glass_filter) = effect_state.glass_filter {
-                        let style = element.style();
                         let rec = SaveLayerRec::default()
                             .bounds(render_rect.rect())
                             .backdrop(glass_filter);
-                        if style.corner_radius.is_round() {
-                            self.canvas.clip_rrect(render_rect, ClipOp::Intersect, true);
-                            self.canvas.save_layer(&rec);
-                        } else {
-                            self.canvas.save_layer(&rec);
-                        }
-                    } else if let Some(blur_radius) = effect_state.blur {
-                        let style = element.style();
+                        self.canvas.save_layer(&rec);
+                    }
 
+                    if let Some(blur_radius) = effect_state.blur {
                         let image_filter = blur(
                             (
                                 blur_radius * self.scale_factor as f32,
@@ -183,12 +184,7 @@ impl RenderPipeline<'_> {
                             let rec = SaveLayerRec::default()
                                 .bounds(render_rect.rect())
                                 .backdrop(&image_filter);
-                            if style.corner_radius.is_round() {
-                                self.canvas.clip_rrect(render_rect, ClipOp::Intersect, true);
-                                self.canvas.save_layer(&rec);
-                            } else {
-                                self.canvas.save_layer(&rec);
-                            }
+                            self.canvas.save_layer(&rec);
                         }
                     }
                 }
