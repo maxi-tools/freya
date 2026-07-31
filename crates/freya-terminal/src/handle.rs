@@ -156,7 +156,11 @@ impl TerminalHandle {
     /// freya-terminal will close it when the handle is dropped.
     ///
     /// # Safety
-    /// The caller must ensure `fd` is a valid PTY master file descriptor.
+    /// - `fd` must be a valid, open PTY master file descriptor.
+    /// - Ownership of `fd` is transferred to the returned handle; the caller
+    ///   must not close `fd` after this call, and must not use it concurrently
+    ///   in a way that races with the handle's I/O or drop.
+    /// - `fd` must remain a PTY master for the lifetime of the handle.
     ///
     /// # Example
     ///
