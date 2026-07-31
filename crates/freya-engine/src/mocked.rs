@@ -1391,6 +1391,15 @@ pub fn blur(
     unimplemented!("This is mocked")
 }
 
+/// Stub matching `skia_safe::image_filters::runtime_shader` for mocked-engine.
+pub fn runtime_shader(
+    _builder: &RuntimeShaderBuilder,
+    _child_shader_name: impl AsRef<str>,
+    _input: impl Into<Option<ImageFilter>>,
+) -> Option<ImageFilter> {
+    unimplemented!("This is mocked")
+}
+
 #[repr(C)]
 #[derive(Default)]
 pub struct SaveLayerRec;
@@ -1583,6 +1592,31 @@ pub struct RuntimeEffect;
 
 impl RuntimeEffect {
     pub fn uniforms(&self) -> &[Uniform] {
+        unimplemented!("This is mocked")
+    }
+
+    pub fn make_for_shader(_sksl: impl AsRef<str>, _options: Option<()>) -> Option<Self> {
+        unimplemented!("This is mocked")
+    }
+}
+
+/// Stub matching `skia_safe::runtime_effect::RuntimeShaderBuilder`.
+pub struct RuntimeShaderBuilder;
+
+impl RuntimeShaderBuilder {
+    pub fn new(_effect: RuntimeEffect) -> Self {
+        unimplemented!("This is mocked")
+    }
+
+    pub fn make_shader(&self, _local_matrix: &Matrix) -> Option<Shader> {
+        unimplemented!("This is mocked")
+    }
+
+    pub fn set_uniform_float(&mut self, _name: impl AsRef<str>, _value: f32) {
+        unimplemented!("This is mocked")
+    }
+
+    pub fn set_uniform_int(&mut self, _name: impl AsRef<str>, _value: i32) {
         unimplemented!("This is mocked")
     }
 }
