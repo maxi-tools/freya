@@ -91,7 +91,7 @@ query = ["dep:freya-query"]
 webview = ["dep:freya-webview"]
 titlebar = ["freya-components/titlebar"]
 terminal = ["dep:freya-terminal"]
-code-editor = ["dep:freya-code-editor"]
+code-editor = ["dep:freya-code-editor", "freya-code-editor/all"]
 
 [dependencies]
 freya-core = { workspace = true }
