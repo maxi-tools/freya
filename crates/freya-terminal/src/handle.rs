@@ -75,6 +75,37 @@ impl Drop for TerminalCleaner {
     }
 }
 
+
+/// Write the full buffer, retrying WouldBlock/Interrupted without rewinding.
+///
+/// Unlike `write_all`, a partial success followed by WouldBlock resumes at the
+/// same offset so the already-written prefix is never duplicated.
+pub(crate) fn write_all_retrying_nonblocking(
+    w: &mut dyn Write,
+    data: &[u8],
+) -> std::io::Result<()> {
+    let mut offset = 0usize;
+    while offset < data.len() {
+        match w.write(&data[offset..]) {
+            Ok(0) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::WriteZero,
+                    "PTY write returned 0 bytes",
+                ));
+            }
+            Ok(n) => offset += n,
+            Err(e)
+                if e.kind() == std::io::ErrorKind::Interrupted
+                    || e.kind() == std::io::ErrorKind::WouldBlock =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
+}
+
 /// Handle to a running terminal instance.
 ///
 /// The handle allows you to write input to the terminal and resize it.
@@ -907,7 +938,7 @@ impl TerminalHandle {
 
 #[cfg(test)]
 mod write_retry_tests {
-    use super::write_all_retrying_nonblocking;
+    use crate::handle::write_all_retrying_nonblocking;
     use std::io::{self, Write};
 
     struct FlakyWriter {
