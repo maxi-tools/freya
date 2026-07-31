@@ -18,6 +18,10 @@ workspace = true
 features = ["freya-core/mocked-engine"]
 
 [features]
+# Previously these four parsers were unconditional; keep them in default so
+# direct dependents of freya-code-editor retain syntax highlighting without
+# opting into every language via `all`.
+default = ["rust", "md", "json", "toml"]
 all = ["rust", "md", "json", "toml", "sql"]
 skia-engine = ["freya-core/skia-engine"]
 rust = ["dep:tree-sitter-rust"]
