@@ -213,6 +213,11 @@ impl ElementExt for SvgElement {
         if let Ok(mut svg_dom) = svg_dom {
             svg_dom.set_container_size(context.area_size.to_i32().to_tuple());
             let mut root = svg_dom.root();
+            // Snapshot both intrinsics before either set_width/set_height: some
+            // SVG roots derive height from viewBox after width is forced, so
+            // reading height after a width mutation can yield the wrong value.
+            let intrinsic_w = root.width();
+            let intrinsic_h = root.height();
             match self.layout.width {
                 Size::Pixels(px) => {
                     root.set_width(svg::Length::new(
@@ -231,11 +236,13 @@ impl ElementExt for SvgElement {
                 // forcing PX turns percentage roots into fixed pixel boxes
                 // (see examples/ferris.svg).
                 Size::Inner => {
-                    let w = root.width();
-                    if matches!(w.unit, svg::LengthUnit::PX | svg::LengthUnit::Number) {
+                    if matches!(
+                        intrinsic_w.unit,
+                        svg::LengthUnit::PX | svg::LengthUnit::Number
+                    ) {
                         root.set_width(svg::Length::new(
-                            w.value * context.scale_factor as f32,
-                            w.unit,
+                            intrinsic_w.value * context.scale_factor as f32,
+                            intrinsic_w.unit,
                         ));
                     }
                 }
@@ -255,11 +262,13 @@ impl ElementExt for SvgElement {
                     root.set_height(svg::Length::new(100., svg::LengthUnit::Percentage));
                 }
                 Size::Inner => {
-                    let h = root.height();
-                    if matches!(h.unit, svg::LengthUnit::PX | svg::LengthUnit::Number) {
+                    if matches!(
+                        intrinsic_h.unit,
+                        svg::LengthUnit::PX | svg::LengthUnit::Number
+                    ) {
                         root.set_height(svg::Length::new(
-                            h.value * context.scale_factor as f32,
-                            h.unit,
+                            intrinsic_h.value * context.scale_factor as f32,
+                            intrinsic_h.unit,
                         ));
                     }
                 }
