@@ -152,7 +152,7 @@ impl TerminalHandle {
 
     /// Create a terminal handle from a daemon-provided PTY file descriptor.
     ///
-    /// The fd must be a valid, open PTY master. Ownership is transferred —
+    /// The fd must be a valid, open PTY master. Ownership is transferred -
     /// freya-terminal will close it when the handle is dropped.
     ///
     /// # Safety
@@ -165,13 +165,15 @@ impl TerminalHandle {
     /// # Example
     ///
     /// ```rust,no_run
+    /// # fn main() -> Result<(), freya_terminal::prelude::TerminalError> {
     /// use freya_terminal::prelude::*;
     /// use std::os::unix::io::RawFd;
     ///
     /// let fd: RawFd = 42; // obtained from daemon
-    /// let handle = unsafe {
-    ///     TerminalHandle::from_fd(TerminalId::new(), fd, None).unwrap()
-    /// };
+    /// let handle = unsafe { TerminalHandle::from_fd(TerminalId::new(), fd, None)? };
+    /// let _ = handle;
+    /// # Ok(())
+    /// # }
     /// ```
     #[cfg(unix)]
     pub unsafe fn from_fd(
@@ -577,7 +579,7 @@ impl TerminalHandle {
     ///
     /// When the running application has enabled mouse tracking, this sends the
     /// release escape sequence to the PTY. Only `PressRelease`, `ButtonMotion`,
-    /// and `AnyMotion` modes receive release events — `Press` mode does not.
+    /// and `AnyMotion` modes receive release events - `Press` mode does not.
     /// Otherwise it ends the current text selection.
     ///
     /// If shift is held, always ends the text selection instead of sending

@@ -88,7 +88,13 @@ pub(crate) fn setup_terminal_from_master(
     let (update_tx, mut update_rx) = futures_channel::mpsc::unbounded::<()>();
 
     let buffer = Rc::new(RefCell::new(TerminalBuffer::default()));
-    let parser = Rc::new(RefCell::new(Parser::new(24, 80, scrollback_size)));
+    // Prefer the PTY's current winsize (attached daemon sessions) over a
+    // hard-coded 24x80 default so pending output is not wrapped wrong (#3 residual).
+    let (rows, cols) = master
+        .get_size()
+        .map(|s| (s.rows.max(1), s.cols.max(1)))
+        .unwrap_or((24, 80));
+    let parser = Rc::new(RefCell::new(Parser::new(rows, cols, scrollback_size)));
     let writer = Rc::new(RefCell::new(None::<Box<dyn std::io::Write + Send>>));
     let closer_notifier = ArcNotify::new();
     let output_notifier = ArcNotify::new();
