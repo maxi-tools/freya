@@ -2041,17 +2041,19 @@ pub mod svg {
     use super::{Canvas, Color, LocalResourceProvider, Size};
 
     pub enum LengthUnit {
+        Number,
         Percentage,
         PX,
     }
 
     pub struct Length {
         pub value: f32,
+        pub unit: LengthUnit,
     }
 
     impl Length {
         pub fn new(value: f32, unit: LengthUnit) -> Self {
-            unimplemented!("This is mocked")
+            Self { value, unit }
         }
     }
 

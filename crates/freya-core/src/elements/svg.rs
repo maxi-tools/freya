@@ -226,11 +226,18 @@ impl ElementExt for SvgElement {
                 Size::Fill => {
                     root.set_width(svg::Length::new(100., svg::LengthUnit::Percentage));
                 }
-                // Intrinsic document size is logical pixels; scale to physical DPI
-                // so default Size::Inner SVGs are not half-size on 2x displays.
+                // Intrinsic absolute sizes are logical pixels; scale those to
+                // physical DPI. Relative units (e.g. 100%) must stay relative —
+                // forcing PX turns percentage roots into fixed pixel boxes
+                // (#3 residual U2 / examples/ferris.svg).
                 Size::Inner => {
-                    let w = root.width().value * context.scale_factor as f32;
-                    root.set_width(svg::Length::new(w, svg::LengthUnit::PX));
+                    let w = root.width();
+                    if matches!(w.unit, svg::LengthUnit::PX | svg::LengthUnit::Number) {
+                        root.set_width(svg::Length::new(
+                            w.value * context.scale_factor as f32,
+                            w.unit,
+                        ));
+                    }
                 }
                 _ => {}
             }
@@ -248,8 +255,13 @@ impl ElementExt for SvgElement {
                     root.set_height(svg::Length::new(100., svg::LengthUnit::Percentage));
                 }
                 Size::Inner => {
-                    let h = root.height().value * context.scale_factor as f32;
-                    root.set_height(svg::Length::new(h, svg::LengthUnit::PX));
+                    let h = root.height();
+                    if matches!(h.unit, svg::LengthUnit::PX | svg::LengthUnit::Number) {
+                        root.set_height(svg::Length::new(
+                            h.value * context.scale_factor as f32,
+                            h.unit,
+                        ));
+                    }
                 }
                 _ => {}
             }
