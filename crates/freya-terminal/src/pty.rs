@@ -89,7 +89,7 @@ pub(crate) fn setup_terminal_from_master(
 
     let buffer = Rc::new(RefCell::new(TerminalBuffer::default()));
     // Prefer the PTY's current winsize (attached daemon sessions) over a
-    // hard-coded 24x80 default so pending output is not wrapped wrong (#3 residual).
+    // hard-coded 24x80 default so pending output is not wrapped wrong.
     let (rows, cols) = master
         .get_size()
         .map(|s| (s.rows.max(1), s.cols.max(1)))

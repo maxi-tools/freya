@@ -55,7 +55,7 @@ impl DerefMut for LayoutData {
 
 /// Process-wide counter so each `.glass_filter(...)` builder call gets a unique
 /// version even when EffectData is reconstructed from defaults every render.
-/// Comparing only a per-instance counter misses real filter changes (#3 residual).
+/// Comparing only a per-instance counter misses real filter changes.
 static GLASS_FILTER_VERSION_EPOCH: AtomicU64 = AtomicU64::new(1);
 
 /// Next unique glass-filter version for EffectData equality / UI diffing.
