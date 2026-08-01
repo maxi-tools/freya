@@ -42,7 +42,7 @@ jobs:
   qodana:
     # Keep the required PR check cheap. The RustRover scan is in qodana-full.
     if: github.event_name == 'pull_request' || github.event_name == 'push'
-    runs-on: warp-ubuntu-latest-x64-2x
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
