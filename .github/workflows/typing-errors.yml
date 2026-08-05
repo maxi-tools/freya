@@ -5,16 +5,13 @@ on:
   pull_request: {}
   workflow_dispatch: {}
 
-permissions:
-  contents: read
-
 jobs:
   spelling:
-    runs-on: [self-hosted, Linux, ARM64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - name: Spell check with typos
-        uses: crate-ci/typos@v1.42.0
+        uses: crate-ci/typos@v1.45.0
         with:
           isolated: true
           config: ./_typos.toml
