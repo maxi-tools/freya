@@ -91,11 +91,12 @@ impl MasterPty for RawFdMasterPty {
         if *self.took_writer.borrow() {
             bail!("cannot take writer more than once");
         }
-        *self.took_writer.borrow_mut() = true;
+        // Only mark taken after dup succeeds (EMFILE must allow retry).
         let duped = unsafe { libc::dup(self.fd) };
         if duped < 0 {
             bail!("dup() failed: {:?}", std::io::Error::last_os_error());
         }
+        *self.took_writer.borrow_mut() = true;
         Ok(Box::new(unsafe { File::from_raw_fd(duped) }))
     }
 
