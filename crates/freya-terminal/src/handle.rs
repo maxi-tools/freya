@@ -3,6 +3,7 @@ use std::{
     io::Write,
     path::PathBuf,
     rc::Rc,
+    sync::atomic::{AtomicUsize, Ordering},
     time::Instant,
 };
 
@@ -20,16 +21,18 @@ use crate::{
         TerminalMouseButton, encode_mouse_move, encode_mouse_press, encode_mouse_release,
         encode_wheel_event,
     },
-    pty::{extract_buffer, query_max_scrollback, spawn_pty},
+    pty::{extract_buffer, query_max_scrollback, setup_terminal_from_master, spawn_pty},
 };
 
 /// Unique identifier for a terminal instance
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TerminalId(pub usize);
 
+static NEXT_TERMINAL_ID: AtomicUsize = AtomicUsize::new(1);
+
 impl TerminalId {
     pub fn new() -> Self {
-        Self(UseId::<TerminalId>::get_in_hook())
+        Self(NEXT_TERMINAL_ID.fetch_add(1, Ordering::Relaxed))
     }
 }
 
@@ -113,6 +116,10 @@ pub struct TerminalHandle {
     pub(crate) pressed_button: Rc<RefCell<Option<TerminalMouseButton>>>,
     /// Current modifier keys state (shift, ctrl, alt, etc.).
     pub(crate) modifiers: Rc<RefCell<Modifiers>>,
+    /// Current inertial scroll velocity (lines/tick).
+    pub(crate) scroll_velocity: Rc<RefCell<f64>>,
+    /// Fractional line accumulator for sub-line scroll precision.
+    pub(crate) scroll_accumulator: Rc<RefCell<f64>>,
 }
 
 impl PartialEq for TerminalHandle {
@@ -141,6 +148,35 @@ impl TerminalHandle {
         scrollback_length: Option<usize>,
     ) -> Result<Self, TerminalError> {
         spawn_pty(id, command, scrollback_length.unwrap_or(1000))
+    }
+
+    /// Create a terminal handle from a daemon-provided PTY file descriptor.
+    ///
+    /// The fd must be a valid, open PTY master. Ownership is transferred —
+    /// freya-terminal will close it when the handle is dropped.
+    ///
+    /// # Safety
+    /// The caller must ensure `fd` is a valid PTY master file descriptor.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use freya_terminal::prelude::*;
+    /// use std::os::unix::io::RawFd;
+    ///
+    /// let fd: RawFd = 42; // obtained from daemon
+    /// let handle = unsafe {
+    ///     TerminalHandle::from_fd(TerminalId::new(), fd, None).unwrap()
+    /// };
+    /// ```
+    #[cfg(unix)]
+    pub unsafe fn from_fd(
+        id: TerminalId,
+        fd: std::os::unix::io::RawFd,
+        scrollback_length: Option<usize>,
+    ) -> Result<Self, TerminalError> {
+        let master = unsafe { crate::fd_pty::RawFdMasterPty::from_fd(fd) };
+        setup_terminal_from_master(id, Box::new(master), scrollback_length.unwrap_or(1000))
     }
 
     /// Refresh the terminal buffer from the parser, preserving selection state.
@@ -291,27 +327,50 @@ impl TerminalHandle {
     /// Write text to the PTY as a paste operation.
     ///
     /// If bracketed paste mode is enabled, wraps the text with `\x1b[200~` ... `\x1b[201~`.
-    // Adapted from https://github.com/alacritty/alacritty/blob/master/alacritty/src/event.rs
     pub fn paste(&self, text: &str) -> Result<(), TerminalError> {
-        if self.parser.borrow().screen().bracketed_paste() {
-            let filtered = text.replace(['\x1b', '\x03'], "");
-            self.write_raw(b"\x1b[200~")?;
-            self.write_raw(filtered.as_bytes())?;
-            self.write_raw(b"\x1b[201~")?;
-        } else {
-            let normalized = text.replace("\r\n", "\r").replace('\n', "\r");
-            self.write_raw(normalized.as_bytes())?;
+        let bracketed = self.parser.borrow().screen().bracketed_paste();
+
+        let mut data = Vec::with_capacity(text.len() + 12);
+        if bracketed {
+            data.extend_from_slice(b"\x1b[200~");
         }
-        // Match typing: clear selection, stamp write time, snap to bottom.
-        // paste uses write_raw so multiline bracketed sequences stay intact;
-        // still apply write()'s viewport side effects (#14 residual P2).
-        let mut buffer = self.buffer.borrow_mut();
-        buffer.selection = None;
-        buffer.scroll_offset = 0;
-        drop(buffer);
-        *self.last_write_time.borrow_mut() = Instant::now();
-        self.scroll_to_bottom();
-        Ok(())
+        data.extend_from_slice(text.as_bytes());
+        if bracketed {
+            data.extend_from_slice(b"\x1b[201~");
+        }
+
+        self.write(&data)
+    }
+
+    /// Write an inline image to the PTY using the iTerm2 escape sequence protocol.
+    ///
+    /// Encodes the image data as base64 and wraps it in an OSC 1337 sequence:
+    /// `ESC ] 1337 ; File=inline=1;size=<bytes>:<base64> ESC \`
+    pub fn write_inline_image(&self, data: &[u8], filename: &str) -> Result<(), TerminalError> {
+        use base64::Engine;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(data);
+        let seq = format!(
+            "\x1b]1337;File=inline=1;size={};name={}:{}\x1b\\",
+            data.len(),
+            base64::engine::general_purpose::STANDARD.encode(filename),
+            b64
+        );
+        self.write(seq.as_bytes())
+    }
+
+    /// Whether bracketed paste mode is enabled by the running application.
+    pub fn bracketed_paste(&self) -> bool {
+        self.parser.borrow().screen().bracketed_paste()
+    }
+
+    /// Whether application cursor key mode (DECCKM) is active.
+    pub fn application_cursor(&self) -> bool {
+        self.parser.borrow().screen().application_cursor()
+    }
+
+    /// Whether the terminal is in alternate screen mode.
+    pub fn alternate_screen(&self) -> bool {
+        self.parser.borrow().screen().alternate_screen()
     }
 
     /// Write data to the PTY without resetting scroll or selection state.
@@ -560,18 +619,13 @@ impl TerminalHandle {
         self.end_selection();
     }
 
-    /// Handle a wheel event intelligently.
+    /// Handle a wheel event with inertial scrolling.
     ///
-    /// The behavior depends on the terminal state:
-    /// - If viewing scrollback history: scrolls the scrollback buffer.
-    /// - If mouse tracking is enabled (e.g., vim, helix): sends wheel escape
-    ///   sequences to the PTY.
-    /// - If on the alternate screen without mouse tracking (e.g., gitui, less):
-    ///   sends arrow key sequences to the PTY (alternate scroll mode, like
-    ///   wezterm/kitty/alacritty).
-    /// - Otherwise (normal shell): scrolls the scrollback buffer.
-    pub fn wheel(&self, delta_y: f64, row: usize, col: usize) {
-        let scroll_delta = if delta_y > 0.0 { 3 } else { -3 };
+    /// Returns `true` if the caller should start a 60fps animation loop
+    /// calling `tick_inertial_scroll()` (only when transitioning from zero velocity).
+    ///
+    /// Alternate screen and mouse-tracking modes bypass inertia entirely.
+    pub fn wheel(&self, delta_y: f64, row: usize, col: usize) -> bool {
         let scroll_offset = self.buffer.borrow().scroll_offset;
         let (mouse_mode, alt_screen, app_cursor) = {
             let parser = self.parser.borrow();
@@ -583,30 +637,85 @@ impl TerminalHandle {
             )
         };
 
-        if scroll_offset > 0 {
-            // User is viewing scrollback history
-            let delta = scroll_delta;
-            self.scroll(delta);
-        } else if mouse_mode != vt100::MouseProtocolMode::None {
-            // App has enabled mouse tracking (vim, helix, etc.)
-            self.send_wheel_to_pty(row, col, delta_y);
-        } else if alt_screen {
-            // Alternate screen without mouse tracking (gitui, less, etc.)
-            // Send arrow key presses, matching wezterm/kitty/alacritty behavior
-            let key = match (delta_y > 0.0, app_cursor) {
-                (true, true) => "\x1bOA",
-                (true, false) => "\x1b[A",
-                (false, true) => "\x1bOB",
-                (false, false) => "\x1b[B",
-            };
-            for _ in 0..Self::ALTERNATE_SCROLL_LINES {
-                let _ = self.write_raw(key.as_bytes());
+        // Scrollback priority: if the user is viewing history, always scroll
+        // the scrollback buffer regardless of mouse-tracking/alt-screen state.
+        // This prevents wheel events from being hijacked by primary-screen apps
+        // that enable mouse tracking while the user is looking at scrollback.
+        if scroll_offset == 0 {
+            // Mouse tracking: bypass inertia, send immediately to PTY
+            if mouse_mode != vt100::MouseProtocolMode::None {
+                self.send_wheel_to_pty(row, col, delta_y);
+                return false;
             }
-        } else {
-            // Normal screen, no mouse tracking — scroll scrollback
-            let delta = scroll_delta;
-            self.scroll(delta);
+            // Alternate screen without mouse tracking: send arrow keys
+            if alt_screen {
+                let key = match (delta_y > 0.0, app_cursor) {
+                    (true, true) => "\x1bOA",
+                    (true, false) => "\x1b[A",
+                    (false, true) => "\x1bOB",
+                    (false, false) => "\x1b[B",
+                };
+                for _ in 0..Self::ALTERNATE_SCROLL_LINES {
+                    let _ = self.write_raw(key.as_bytes());
+                }
+                return false;
+            }
         }
+
+        // Inertial scrolling for normal scrollback (or scrollback history).
+        // Compute new velocity without holding the borrow across self.scroll().
+        let was_zero;
+        let remaining_velocity;
+        {
+            let mut velocity = self.scroll_velocity.borrow_mut();
+            was_zero = velocity.abs() < 0.1;
+
+            // Opposite direction cancels momentum
+            if (delta_y > 0.0 && *velocity < 0.0) || (delta_y < 0.0 && *velocity > 0.0) {
+                *velocity = 0.0;
+                *self.scroll_accumulator.borrow_mut() = 0.0;
+            }
+
+            *velocity += delta_y * 3.0;
+            *velocity = velocity.clamp(-50.0, 50.0);
+            remaining_velocity = *velocity;
+        }
+
+        // Apply immediate scroll for responsiveness (after dropping velocity borrow).
+        let immediate = if delta_y > 0.0 { 3 } else { -3 };
+        self.scroll(immediate);
+
+        was_zero && remaining_velocity.abs() >= 0.1
+    }
+
+    /// Tick the inertial scroll animation. Call at ~60fps.
+    /// Returns `true` if still animating, `false` when velocity has decayed to zero.
+    pub fn tick_inertial_scroll(&self) -> bool {
+        // Scope the initial velocity check and compute the line delta without
+        // holding any borrows across `self.scroll()`, which itself borrows these cells.
+        let lines = {
+            let mut velocity = self.scroll_velocity.borrow_mut();
+            if velocity.abs() < 0.1 {
+                *velocity = 0.0;
+                *self.scroll_accumulator.borrow_mut() = 0.0;
+                return false;
+            }
+
+            let mut acc = self.scroll_accumulator.borrow_mut();
+            *acc += *velocity;
+            let lines = acc.trunc() as i32;
+            *acc -= lines as f64;
+            lines
+        };
+
+        if lines != 0 {
+            self.scroll(lines);
+        }
+
+        // Apply friction and return still-animating status in one borrow.
+        let mut velocity = self.scroll_velocity.borrow_mut();
+        *velocity *= 0.92;
+        velocity.abs() >= 0.1
     }
 
     /// Read the current terminal buffer.
@@ -766,7 +875,7 @@ impl TerminalHandle {
                 &row_cells
             };
 
-            let mut line: String = cells
+            let line: String = cells
                 .iter()
                 .map(|cell| {
                     if cell.has_contents() {
@@ -775,19 +884,7 @@ impl TerminalHandle {
                         " "
                     }
                 })
-                .collect();
-
-            // Strip trailing empty-cell padding so it doesn't paste as blank
-            // lines, but keep intentional trailing spaces (cells with contents)
-            // (#14 residual P2).
-            if !is_single && !is_last {
-                let pad = cells
-                    .iter()
-                    .rev()
-                    .take_while(|cell| !cell.has_contents())
-                    .count();
-                line.truncate(line.len().saturating_sub(pad));
-            }
+                .collect::<String>();
 
             lines.push(line);
         }
