@@ -1,49 +1,25 @@
-# Qodana configuration for maxi-tools
-# Source of truth: maxi-config/qodana.yaml
-
-version: "1.0"
-
+version: '1.0'
 profile:
   name: qodana.recommended
-
 exclude:
-  - name: All
-    paths:
-      - target
-      - .git
-      - .maxi-worktrees
-      - .claude/worktrees
-      - .worktrees
-      - node_modules
-      - vendor
-      - "**/tests/**"
-      - "**/benches/**"
-      - "**/examples/**"
-  # Noisy: flags every workflow without explicit permissions block
-  # Tracked for real cleanup in maxi-tools/maxi-config#7
-  - name: actions/missing-workflow-permissions
-  # False positive: diagnostic logging of session IDs, tier levels, credential names
-  - name: rust/cleartext-logging
-    paths:
-      - "**/daemon/**"
-      - "**/audit/**"
-      - "**/proficiency/**"
-      - "**/orchestrator.*"
-      - "**/session_parser.*"
-  # False positive: Argon2 KDF parameters and test fixture passwords
-  - name: rust/hard-coded-cryptographic-value
-    paths:
-      - "**/tests/**"
-      - "**/crypto.rs"
-  # False positive: intentional RDMA raw pointer allocation via posix_memalign
-  - name: rust/access-invalid-pointer
-    paths:
-      - "**/transport-rdma/**"
-  # False positive: status_page.html uses escHtml() on all user values, served locally
-  - name: js/xss
-    paths:
-      - "**/status_page.html"
-  # False positive: puppeteer_server returns static error strings, no stack traces
-  - name: js/stack-trace-exposure
-    paths:
-      - "**/puppeteer_server.js"
+- name: All
+  paths:
+  - target
+  - .git
+  - .maxi-worktrees
+  - .claude/worktrees
+  - .worktrees
+  - node_modules
+  - vendor
+  - '**/tests/**'
+  - '**/benches/**'
+  - '**/examples/**'
+- name: actions/missing-workflow-permissions
+- name: rust/cleartext-logging
+  paths:
+  - '**/daemon/**'
+  - '**/audit/**'
+  - '**/proficiency/**'
+  - '**/orchestrator.*'
+  - '**/session_parser.*'
+linter: qodana-rust
