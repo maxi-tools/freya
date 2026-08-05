@@ -302,12 +302,7 @@ impl<'a> Gradient<'a> {
 }
 
 pub mod shaders {
-    use super::{
-        Gradient,
-        Matrix,
-        Point,
-        Shader,
-    };
+    use super::{Gradient, Matrix, Point, Shader};
 
     pub fn linear_gradient<'a>(
         _points: (impl Into<Point>, impl Into<Point>),
@@ -1384,6 +1379,7 @@ pub enum SrcRectConstraint {
 #[derive(Default)]
 pub struct SamplingOptions;
 
+#[derive(Clone, Debug)]
 pub struct ImageFilter;
 
 pub fn blur(
@@ -1391,6 +1387,15 @@ pub fn blur(
     tile_mode: impl Into<Option<()>>,
     input: impl Into<Option<()>>,
     crop_rect: &Rect,
+) -> Option<ImageFilter> {
+    unimplemented!("This is mocked")
+}
+
+/// Stub matching `skia_safe::image_filters::runtime_shader` for mocked-engine.
+pub fn runtime_shader(
+    _builder: &RuntimeShaderBuilder,
+    _child_shader_name: impl AsRef<str>,
+    _input: impl Into<Option<ImageFilter>>,
 ) -> Option<ImageFilter> {
     unimplemented!("This is mocked")
 }
@@ -1587,6 +1592,31 @@ pub struct RuntimeEffect;
 
 impl RuntimeEffect {
     pub fn uniforms(&self) -> &[Uniform] {
+        unimplemented!("This is mocked")
+    }
+
+    pub fn make_for_shader(_sksl: impl AsRef<str>, _options: Option<()>) -> Option<Self> {
+        unimplemented!("This is mocked")
+    }
+}
+
+/// Stub matching `skia_safe::runtime_effect::RuntimeShaderBuilder`.
+pub struct RuntimeShaderBuilder;
+
+impl RuntimeShaderBuilder {
+    pub fn new(_effect: RuntimeEffect) -> Self {
+        unimplemented!("This is mocked")
+    }
+
+    pub fn make_shader(&self, _local_matrix: &Matrix) -> Option<Shader> {
+        unimplemented!("This is mocked")
+    }
+
+    pub fn set_uniform_float(&mut self, _name: impl AsRef<str>, _value: f32) {
+        unimplemented!("This is mocked")
+    }
+
+    pub fn set_uniform_int(&mut self, _name: impl AsRef<str>, _value: i32) {
         unimplemented!("This is mocked")
     }
 }
@@ -2008,25 +2038,22 @@ pub enum BlurStyle {
 }
 
 pub mod svg {
-    use super::{
-        Canvas,
-        Color,
-        LocalResourceProvider,
-        Size,
-    };
+    use super::{Canvas, Color, LocalResourceProvider, Size};
 
     pub enum LengthUnit {
+        Number,
         Percentage,
         PX,
     }
 
     pub struct Length {
         pub value: f32,
+        pub unit: LengthUnit,
     }
 
     impl Length {
         pub fn new(value: f32, unit: LengthUnit) -> Self {
-            unimplemented!("This is mocked")
+            Self { value, unit }
         }
     }
 
@@ -2190,10 +2217,7 @@ pub enum ColorType {
 
 pub struct SurfaceProps;
 
-use std::ops::{
-    Deref,
-    DerefMut,
-};
+use std::ops::{Deref, DerefMut};
 
 pub struct RecordingContext;
 
@@ -2211,12 +2235,7 @@ pub mod gpu {
 }
 
 pub mod direct_contexts {
-    use super::{
-        DirectContext,
-        Interface,
-        gpu,
-        vk,
-    };
+    use super::{DirectContext, Interface, gpu, vk};
     pub fn make_gl<'a>(
         _interface: impl Into<Option<Interface>>,
         _options: impl Into<Option<&'a gpu::ContextOptions>>,

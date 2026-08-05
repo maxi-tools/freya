@@ -9,7 +9,7 @@ use std::{
 
 use freya_core::{
     notify::ArcNotify,
-    prelude::{Platform, TaskHandle, UserEvent},
+    prelude::{Platform, TaskHandle, UseId, UserEvent},
 };
 use keyboard_types::{Key, Modifiers, NamedKey};
 use portable_pty::{MasterPty, PtySize};
@@ -21,7 +21,7 @@ use crate::{
         TerminalMouseButton, encode_mouse_move, encode_mouse_press, encode_mouse_release,
         encode_wheel_event,
     },
-    pty::{extract_buffer, query_max_scrollback, spawn_pty},
+    pty::{extract_buffer, query_max_scrollback, setup_terminal_from_master, spawn_pty},
 };
 
 /// Unique identifier for a terminal instance
@@ -73,6 +73,60 @@ impl Drop for TerminalCleaner {
         self.pty_task.try_cancel();
         self.closer_notifier.notify();
     }
+}
+
+
+/// Cap on consecutive WouldBlock/Interrupted spins before giving up.
+///
+/// At 1 ms per spin this is ~256 ms of pure stall. Progress (any Ok(n>0)) resets
+/// the counter so large writes that occasionally block still complete.
+const MAX_WRITE_STALL_SPINS: u32 = 256;
+
+/// Write the full buffer, retrying WouldBlock/Interrupted without rewinding.
+///
+/// Unlike `write_all`, a partial success followed by WouldBlock resumes at the
+/// same offset so the already-written prefix is never duplicated.
+///
+/// Unbounded sleep-retry would freeze the terminal event loop when a daemon
+/// PTY stays full or has no reader; after [`MAX_WRITE_STALL_SPINS`] consecutive
+/// stalls this returns `WouldBlock` so the caller can surface the failure.
+pub(crate) fn write_all_retrying_nonblocking(
+    w: &mut dyn Write,
+    data: &[u8],
+) -> std::io::Result<()> {
+    let mut offset = 0usize;
+    let mut stall_spins = 0u32;
+    while offset < data.len() {
+        match w.write(&data[offset..]) {
+            Ok(0) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::WriteZero,
+                    "PTY write returned 0 bytes",
+                ));
+            }
+            Ok(n) => {
+                offset += n;
+                stall_spins = 0;
+            }
+            Err(e)
+                if e.kind() == std::io::ErrorKind::Interrupted
+                    || e.kind() == std::io::ErrorKind::WouldBlock =>
+            {
+                stall_spins += 1;
+                if stall_spins >= MAX_WRITE_STALL_SPINS {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::WouldBlock,
+                        format!(
+                            "PTY write stalled after {MAX_WRITE_STALL_SPINS} consecutive WouldBlock/Interrupted spins"
+                        ),
+                    ));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
 }
 
 /// Handle to a running terminal instance.
@@ -148,6 +202,42 @@ impl TerminalHandle {
         scrollback_length: Option<usize>,
     ) -> Result<Self, TerminalError> {
         spawn_pty(id, command, scrollback_length.unwrap_or(1000))
+    }
+
+    /// Create a terminal handle from a daemon-provided PTY file descriptor.
+    ///
+    /// The fd must be a valid, open PTY master. Ownership is transferred -
+    /// freya-terminal will close it when the handle is dropped.
+    ///
+    /// # Safety
+    /// - `fd` must be a valid, open PTY master file descriptor.
+    /// - Ownership of `fd` is transferred to the returned handle; the caller
+    ///   must not close `fd` after this call, and must not use it concurrently
+    ///   in a way that races with the handle's I/O or drop.
+    /// - `fd` must remain a PTY master for the lifetime of the handle.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # fn main() -> Result<(), freya_terminal::prelude::TerminalError> {
+    /// use freya_terminal::prelude::*;
+    /// use std::os::unix::io::RawFd;
+    ///
+    /// let fd: RawFd = 42; // obtained from daemon
+    /// let handle = unsafe { TerminalHandle::from_fd(TerminalId::new(), fd, None)? };
+    /// let _ = handle;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[cfg(unix)]
+    pub unsafe fn from_fd(
+        id: TerminalId,
+        fd: std::os::unix::io::RawFd,
+        scrollback_length: Option<usize>,
+    ) -> Result<Self, TerminalError> {
+        let master = unsafe { crate::fd_pty::RawFdMasterPty::from_fd(fd) }
+            .map_err(|e| TerminalError::PtyError(e.to_string()))?;
+        setup_terminal_from_master(id, Box::new(master), scrollback_length.unwrap_or(1000))
     }
 
     /// Refresh the terminal buffer from the parser, preserving selection state.
@@ -345,10 +435,14 @@ impl TerminalHandle {
     }
 
     /// Write data to the PTY without resetting scroll or selection state.
+    ///
+    /// Retries `WouldBlock`/`Interrupted` so a daemon master whose shared OFD
+    /// has `O_NONBLOCK` cannot truncate a multi-chunk paste after a partial
+    /// write (plain `write_all` would surface the error with no safe retry).
     fn write_raw(&self, data: &[u8]) -> Result<(), TerminalError> {
         match &mut *self.writer.borrow_mut() {
             Some(w) => {
-                w.write_all(data)
+                write_all_retrying_nonblocking(w.as_mut(), data)
                     .map_err(|e| TerminalError::WriteError(e.to_string()))?;
                 w.flush()
                     .map_err(|e| TerminalError::WriteError(e.to_string()))?;
@@ -544,7 +638,7 @@ impl TerminalHandle {
     ///
     /// When the running application has enabled mouse tracking, this sends the
     /// release escape sequence to the PTY. Only `PressRelease`, `ButtonMotion`,
-    /// and `AnyMotion` modes receive release events — `Press` mode does not.
+    /// and `AnyMotion` modes receive release events - `Press` mode does not.
     /// Otherwise it ends the current text selection.
     ///
     /// If shift is held, always ends the text selection instead of sending
@@ -865,3 +959,75 @@ impl TerminalHandle {
         Some(lines.join("\n"))
     }
 }
+
+#[cfg(test)]
+mod write_retry_tests {
+    use crate::handle::write_all_retrying_nonblocking;
+    use std::io::{self, Write};
+
+    struct FlakyWriter {
+        calls: usize,
+        buf: Vec<u8>,
+    }
+
+    impl Write for FlakyWriter {
+        fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+            self.calls += 1;
+            if self.calls == 1 {
+                // Partial success (3 bytes), matching a nonblocking OFD that
+                // filled mid-write. Caller must resume at offset 3.
+                let n = data.len().min(3);
+                self.buf.extend_from_slice(&data[..n]);
+                return Ok(n);
+            }
+            if self.calls == 2 {
+                return Err(io::Error::new(io::ErrorKind::WouldBlock, "still full"));
+            }
+            let n = data.len();
+            self.buf.extend_from_slice(data);
+            Ok(n)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn write_all_retrying_nonblocking_resumes_after_would_block() {
+        let mut w = FlakyWriter {
+            calls: 0,
+            buf: Vec::new(),
+        };
+        write_all_retrying_nonblocking(&mut w, b"hello-world").expect("write");
+        assert_eq!(w.buf, b"hello-world");
+        assert!(w.calls >= 3, "expected retries, calls={}", w.calls);
+    }
+
+    struct AlwaysBlockWriter {
+        calls: usize,
+    }
+
+    impl Write for AlwaysBlockWriter {
+        fn write(&mut self, _data: &[u8]) -> io::Result<usize> {
+            self.calls += 1;
+            Err(io::Error::new(io::ErrorKind::WouldBlock, "full"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn write_all_retrying_nonblocking_bounds_would_block_spins() {
+        // Permanent WouldBlock must not freeze the terminal event loop.
+        // Bound is MAX_WRITE_STALL_SPINS (256 × 1 ms ≈ 256 ms).
+        let mut w = AlwaysBlockWriter { calls: 0 };
+        let err = write_all_retrying_nonblocking(&mut w, b"x")
+            .expect_err("must not spin forever on permanent WouldBlock");
+        assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
+        assert_eq!(w.calls, 256, "should stop after MAX_WRITE_STALL_SPINS");
+    }
+}
+

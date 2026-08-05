@@ -105,7 +105,7 @@ pub fn svg(bytes: impl Into<SvgBytes>) -> Svg {
             event_handlers: HashMap::default(),
             bytes: bytes.into(),
             effect: None,
-            color: Color::BLACK,
+            color: None,
             stroke: None,
             stroke_width: None,
             fill: None,
@@ -120,7 +120,7 @@ pub struct SvgElement {
     pub layout: LayoutData,
     pub event_handlers: FxHashMap<EventName, EventHandlerType>,
     pub bytes: SvgBytes,
-    pub color: Color,
+    pub color: Option<Color>,
     pub stroke: Option<Color>,
     pub stroke_width: Option<f32>,
     pub fill: Option<Color>,
@@ -213,9 +213,17 @@ impl ElementExt for SvgElement {
         if let Ok(mut svg_dom) = svg_dom {
             svg_dom.set_container_size(context.area_size.to_i32().to_tuple());
             let mut root = svg_dom.root();
+            // Snapshot both intrinsics before either set_width/set_height: some
+            // SVG roots derive height from viewBox after width is forced, so
+            // reading height after a width mutation can yield the wrong value.
+            let intrinsic_w = root.width();
+            let intrinsic_h = root.height();
             match self.layout.width {
                 Size::Pixels(px) => {
-                    root.set_width(svg::Length::new(px.get(), svg::LengthUnit::PX));
+                    root.set_width(svg::Length::new(
+                        px.get() * context.scale_factor as f32,
+                        svg::LengthUnit::PX,
+                    ));
                 }
                 Size::Percentage(per) => {
                     root.set_width(svg::Length::new(per.get(), svg::LengthUnit::Percentage));
@@ -223,11 +231,29 @@ impl ElementExt for SvgElement {
                 Size::Fill => {
                     root.set_width(svg::Length::new(100., svg::LengthUnit::Percentage));
                 }
+                // Intrinsic absolute sizes are logical pixels; scale those to
+                // physical DPI. Relative units (e.g. 100%) must stay relative:
+                // forcing PX turns percentage roots into fixed pixel boxes
+                // (see examples/ferris.svg).
+                Size::Inner => {
+                    if matches!(
+                        intrinsic_w.unit,
+                        svg::LengthUnit::PX | svg::LengthUnit::Number
+                    ) {
+                        root.set_width(svg::Length::new(
+                            intrinsic_w.value * context.scale_factor as f32,
+                            intrinsic_w.unit,
+                        ));
+                    }
+                }
                 _ => {}
             }
             match self.layout.height {
                 Size::Pixels(px) => {
-                    root.set_height(svg::Length::new(px.get(), svg::LengthUnit::PX));
+                    root.set_height(svg::Length::new(
+                        px.get() * context.scale_factor as f32,
+                        svg::LengthUnit::PX,
+                    ));
                 }
                 Size::Percentage(per) => {
                     root.set_height(svg::Length::new(per.get(), svg::LengthUnit::Percentage));
@@ -235,10 +261,24 @@ impl ElementExt for SvgElement {
                 Size::Fill => {
                     root.set_height(svg::Length::new(100., svg::LengthUnit::Percentage));
                 }
+                Size::Inner => {
+                    if matches!(
+                        intrinsic_h.unit,
+                        svg::LengthUnit::PX | svg::LengthUnit::Number
+                    ) {
+                        root.set_height(svg::Length::new(
+                            intrinsic_h.value * context.scale_factor as f32,
+                            intrinsic_h.unit,
+                        ));
+                    }
+                }
                 _ => {}
             }
             if let Some(stroke_width) = self.stroke_width {
-                root.set_stroke_width(svg::Length::new(stroke_width, svg::LengthUnit::PX));
+                root.set_stroke_width(svg::Length::new(
+                    stroke_width * context.scale_factor as f32,
+                    svg::LengthUnit::PX,
+                ));
             }
             Some((
                 Size2D::new(root.width().value, root.height().value),
@@ -276,11 +316,8 @@ impl ElementExt for SvgElement {
         context
             .canvas
             .translate(context.layout_node.visible_area().origin.to_tuple());
-        context
-            .canvas
-            .scale((context.scale_factor as f32, context.scale_factor as f32));
 
-        root.set_color(self.color.into());
+        root.set_color(self.color.unwrap_or(context.text_style_state.color).into());
         if let Some(fill) = self.fill {
             root.set_fill(svg::Paint::from_color(fill.into()));
         }
@@ -288,7 +325,10 @@ impl ElementExt for SvgElement {
             root.set_stroke(svg::Paint::from_color(stroke.into()));
         }
         if let Some(stroke_width) = self.stroke_width {
-            root.set_stroke_width(svg::Length::new(stroke_width, svg::LengthUnit::PX));
+            root.set_stroke_width(svg::Length::new(
+                stroke_width * context.scale_factor as f32,
+                svg::LengthUnit::PX,
+            ));
         }
         svg_dom.render(context.canvas);
         context.canvas.restore();
@@ -350,7 +390,7 @@ impl Svg {
     }
 
     pub fn color(mut self, color: impl Into<Color>) -> Self {
-        self.element.color = color.into();
+        self.element.color = Some(color.into());
         self
     }
 

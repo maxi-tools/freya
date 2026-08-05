@@ -1,19 +1,9 @@
 use freya_engine::prelude::{
-    Canvas,
-    ClipOp,
-    FontCollection,
-    FontMgr,
-    SaveLayerRec,
-    SkMatrix,
-    SkPoint,
-    blur,
+    Canvas, ClipOp, FontCollection, FontMgr, PathBuilder, SaveLayerRec, SkMatrix, SkPoint, blur,
 };
 
 use crate::{
-    element::{
-        ClipContext,
-        RenderContext,
-    },
+    element::{ClipContext, RenderContext},
     prelude::Color,
     style::shadow::ShadowPosition,
     tree::Tree,
@@ -133,6 +123,71 @@ impl RenderPipeline<'_> {
                         }
                     }
 
+                    // Glass/blur backdrop MUST be established before opacity
+                    // save_layer_alpha_f: those layers redirect drawing to an
+                    // empty offscreen buffer, so a later backdrop would sample
+                    // transparency instead of the scene behind the element.
+                    //
+                    // Rounded clip is applied only while compositing each
+                    // backdrop layer, then restored so outer shadows/borders
+                    // in `element.render` are not clipped. Match Rect paint:
+                    // use smoothed_path when corner smoothing is set.
+                    let corner = element.style().corner_radius;
+                    let round = corner.is_round();
+
+                    if let Some(ref glass_filter) = effect_state.glass_filter {
+                        let rec = SaveLayerRec::default()
+                            .bounds(render_rect.rect())
+                            .backdrop(glass_filter);
+                        if round {
+                            let clip_save = self.canvas.save();
+                            if corner.smoothing > 0.0 {
+                                let mut pb = PathBuilder::new();
+                                pb.add_path(&corner.smoothed_path(render_rect));
+                                let path = pb.detach();
+                                self.canvas.clip_path(&path, ClipOp::Intersect, true);
+                            } else {
+                                self.canvas.clip_rrect(render_rect, ClipOp::Intersect, true);
+                            }
+                            self.canvas.save_layer(&rec);
+                            self.canvas.restore_to_count(clip_save);
+                        } else {
+                            self.canvas.save_layer(&rec);
+                        }
+                    }
+
+                    if let Some(blur_radius) = effect_state.blur {
+                        let image_filter = blur(
+                            (
+                                blur_radius * self.scale_factor as f32,
+                                blur_radius * self.scale_factor as f32,
+                            ),
+                            None,
+                            None,
+                            render_rect.rect(),
+                        );
+                        if let Some(image_filter) = image_filter {
+                            let rec = SaveLayerRec::default()
+                                .bounds(render_rect.rect())
+                                .backdrop(&image_filter);
+                            if round {
+                                let clip_save = self.canvas.save();
+                                if corner.smoothing > 0.0 {
+                                    let mut pb = PathBuilder::new();
+                                    pb.add_path(&corner.smoothed_path(render_rect));
+                                    let path = pb.detach();
+                                    self.canvas.clip_path(&path, ClipOp::Intersect, true);
+                                } else {
+                                    self.canvas.clip_rrect(render_rect, ClipOp::Intersect, true);
+                                }
+                                self.canvas.save_layer(&rec);
+                                self.canvas.restore_to_count(clip_save);
+                            } else {
+                                self.canvas.save_layer(&rec);
+                            }
+                        }
+                    }
+
                     for opacity in effect_state.opacities.iter() {
                         self.canvas.save_layer_alpha_f(layer_bounds, *opacity);
                     }
@@ -163,36 +218,6 @@ impl RenderPipeline<'_> {
                 hotpath::measure_block!("Element Render", {
                     element.render(render_context);
                 });
-
-                if let Some(effect_state) = effect_state {
-                    let visible_area = layout_node.visible_area();
-                    let render_rect = element.render_rect(&visible_area, self.scale_factor as f32);
-                    // Apply blur effect
-                    if let Some(blur_radius) = effect_state.blur {
-                        let style = element.style();
-
-                        let image_filter = blur(
-                            (
-                                blur_radius * self.scale_factor as f32,
-                                blur_radius * self.scale_factor as f32,
-                            ),
-                            None,
-                            None,
-                            render_rect.rect(),
-                        );
-                        if let Some(image_filter) = image_filter {
-                            let rec = SaveLayerRec::default()
-                                .bounds(render_rect.rect())
-                                .backdrop(&image_filter);
-                            if style.corner_radius.is_round() {
-                                self.canvas.clip_rrect(render_rect, ClipOp::Intersect, true);
-                                self.canvas.save_layer(&rec);
-                            } else {
-                                self.canvas.save_layer(&rec);
-                            }
-                        }
-                    }
-                }
 
                 self.canvas.restore_to_count(layer);
             }

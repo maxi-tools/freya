@@ -1,55 +1,30 @@
 use std::{
     borrow::Cow,
     hash::Hash,
-    ops::{
-        Deref,
-        DerefMut,
-    },
+    ops::{Deref, DerefMut},
     rc::Rc,
+    sync::atomic::{AtomicU64, Ordering},
 };
 
-use torin::{
-    prelude::Area,
-    torin::Torin,
-};
+use torin::{prelude::Area, torin::Torin};
 
 use crate::{
     accessibility::{
         dirty_nodes::AccessibilityDirtyNodes,
         focusable::Focusable,
         groups::AccessibilityGroups,
-        id::{
-            AccessibilityGenerator,
-            AccessibilityId,
-        },
+        id::{AccessibilityGenerator, AccessibilityId},
         tree::ACCESSIBILITY_ROOT_ID,
     },
     element::ElementExt,
-    layers::{
-        Layer,
-        Layers,
-    },
+    layers::{Layer, Layers},
     node_id::NodeId,
-    prelude::{
-        AccessibilityFocusStrategy,
-        CursorStyle,
-    },
+    prelude::{AccessibilityFocusStrategy, CursorStyle},
     style::{
-        border::Border,
-        color::Color,
-        corner_radius::CornerRadius,
-        fill::Fill,
-        font_size::FontSize,
-        font_slant::FontSlant,
-        font_weight::FontWeight,
-        font_width::FontWidth,
-        scale::Scale,
-        shadow::Shadow,
-        text_align::TextAlign,
-        text_decoration::TextDecoration,
-        text_height::TextHeightBehavior,
-        text_overflow::TextOverflow,
-        text_shadow::TextShadow,
+        border::Border, color::Color, corner_radius::CornerRadius, fill::Fill, font_size::FontSize,
+        font_slant::FontSlant, font_weight::FontWeight, font_width::FontWidth, scale::Scale,
+        shadow::Shadow, text_align::TextAlign, text_decoration::TextDecoration,
+        text_height::TextHeightBehavior, text_overflow::TextOverflow, text_shadow::TextShadow,
     },
 };
 
@@ -78,15 +53,44 @@ impl DerefMut for LayoutData {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+/// Process-wide counter so each `.glass_filter(...)` builder call gets a unique
+/// version even when EffectData is reconstructed from defaults every render.
+/// Comparing only a per-instance counter misses real filter changes.
+static GLASS_FILTER_VERSION_EPOCH: AtomicU64 = AtomicU64::new(1);
+
+/// Next unique glass-filter version for EffectData equality / UI diffing.
+pub fn next_glass_filter_version() -> u64 {
+    GLASS_FILTER_VERSION_EPOCH.fetch_add(1, Ordering::Relaxed)
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct EffectData {
     pub overflow: Overflow,
     pub rotation: Option<f32>,
     pub scale: Option<Scale>,
     pub opacity: Option<f32>,
     pub blur: Option<f32>,
+    pub glass_filter: Option<freya_engine::prelude::ImageFilter>,
+    /// Monotonic counter incremented when glass_filter changes, used for diff detection.
+    pub glass_filter_version: u64,
     pub scrollable: bool,
     pub interactive: Interactive,
+}
+
+impl PartialEq for EffectData {
+    fn eq(&self, other: &Self) -> bool {
+        self.overflow == other.overflow
+            && self.rotation == other.rotation
+            && self.scale == other.scale
+            && self.opacity == other.opacity
+            && self.blur == other.blur
+            // Presence + version: ImageFilter is not Eq; version is the content key,
+            // but None vs Some(at default version 0) must still differ.
+            && self.glass_filter.is_some() == other.glass_filter.is_some()
+            && self.glass_filter_version == other.glass_filter_version
+            && self.scrollable == other.scrollable
+            && self.interactive == other.interactive
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -286,7 +290,7 @@ impl From<bool> for Interactive {
     }
 }
 
-#[derive(PartialEq, Default, Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct EffectState {
     pub overflow: Overflow,
     pub clips: Rc<[NodeId]>,
@@ -300,10 +304,29 @@ pub struct EffectState {
     pub opacities: Rc<[f32]>,
 
     pub blur: Option<f32>,
+    pub glass_filter: Option<freya_engine::prelude::ImageFilter>,
+    pub glass_filter_version: u64,
 
     pub scrollables: Rc<[NodeId]>,
 
     pub interactive: Interactive,
+}
+
+impl PartialEq for EffectState {
+    fn eq(&self, other: &Self) -> bool {
+        self.overflow == other.overflow
+            && self.clips == other.clips
+            && self.rotations == other.rotations
+            && self.rotation == other.rotation
+            && self.scales == other.scales
+            && self.scale == other.scale
+            && self.opacities == other.opacities
+            && self.blur == other.blur
+            && self.glass_filter.is_some() == other.glass_filter.is_some()
+            && self.glass_filter_version == other.glass_filter_version
+            && self.scrollables == other.scrollables
+            && self.interactive == other.interactive
+    }
 }
 
 impl EffectState {
@@ -318,6 +341,7 @@ impl EffectState {
         *self = Self {
             overflow: Overflow::default(),
             blur: None,
+            glass_filter: None,
             rotation: None,
             scale: None,
             ..parent_effect_state.clone()
@@ -340,6 +364,8 @@ impl EffectState {
         if let Some(effect_data) = effect_data {
             self.overflow = effect_data.overflow;
             self.blur = effect_data.blur;
+            self.glass_filter = effect_data.glass_filter.clone();
+            self.glass_filter_version = effect_data.glass_filter_version;
 
             if let Some(rotation) = effect_data.rotation {
                 let mut rotations = parent_effect_state.rotations.to_vec();

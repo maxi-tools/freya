@@ -16,7 +16,9 @@ use vt100::Parser;
 
 use crate::{
     buffer::TerminalBuffer,
-    handle::{TerminalCleaner, TerminalError, TerminalHandle, TerminalId},
+    handle::{
+        write_all_retrying_nonblocking, TerminalCleaner, TerminalError, TerminalHandle, TerminalId,
+    },
 };
 
 /// Query the maximum scrollback available without disturbing the viewport.
@@ -63,10 +65,38 @@ pub(crate) fn spawn_pty(
     command: CommandBuilder,
     scrollback_size: usize,
 ) -> Result<TerminalHandle, TerminalError> {
+    let pty_system = native_pty_system();
+    let pair = pty_system
+        .openpty(PtySize::default())
+        .map_err(|_| TerminalError::NotInitialized)?;
+
+    pair.slave
+        .spawn_command(command)
+        .map_err(|_| TerminalError::NotInitialized)?;
+
+    setup_terminal_from_master(id, pair.master, scrollback_size)
+}
+
+/// Wire up a [`MasterPty`] (reader, writer, async tasks) into a [`TerminalHandle`].
+///
+/// This is the shared post-PTY-creation path used by both [`spawn_pty`] (which
+/// opens its own PTY + spawns a command) and [`TerminalHandle::from_fd`] (which
+/// wraps a daemon-provided fd).
+pub(crate) fn setup_terminal_from_master(
+    id: TerminalId,
+    master: Box<dyn MasterPty + Send>,
+    scrollback_size: usize,
+) -> Result<TerminalHandle, TerminalError> {
     let (update_tx, mut update_rx) = futures_channel::mpsc::unbounded::<()>();
 
     let buffer = Rc::new(RefCell::new(TerminalBuffer::default()));
-    let parser = Rc::new(RefCell::new(Parser::new(24, 80, scrollback_size)));
+    // Prefer the PTY's current winsize (attached daemon sessions) over a
+    // hard-coded 24x80 default so pending output is not wrapped wrong.
+    let (rows, cols) = master
+        .get_size()
+        .map(|s| (s.rows.max(1), s.cols.max(1)))
+        .unwrap_or((24, 80));
+    let parser = Rc::new(RefCell::new(Parser::new(rows, cols, scrollback_size)));
     let writer = Rc::new(RefCell::new(None::<Box<dyn std::io::Write + Send>>));
     let closer_notifier = ArcNotify::new();
     let output_notifier = ArcNotify::new();
@@ -76,26 +106,17 @@ pub(crate) fn spawn_pty(
     let clipboard_content: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
     let clipboard_notifier = ArcNotify::new();
 
-    let pty_system = native_pty_system();
-    let pair = pty_system
-        .openpty(PtySize::default())
-        .map_err(|_| TerminalError::NotInitialized)?;
-    let master_writer = pair
-        .master
+    let master_writer = master
         .take_writer()
         .map_err(|_| TerminalError::NotInitialized)?;
     *writer.borrow_mut() = Some(master_writer);
 
-    pair.slave
-        .spawn_command(command)
-        .map_err(|_| TerminalError::NotInitialized)?;
-    let reader = pair
-        .master
+    let reader = master
         .try_clone_reader()
         .map_err(|_| TerminalError::NotInitialized)?;
     let mut reader = blocking::Unblock::new(reader);
 
-    let master: Rc<RefCell<Box<dyn MasterPty + Send>>> = Rc::new(RefCell::new(pair.master));
+    let master: Rc<RefCell<Box<dyn MasterPty + Send>>> = Rc::new(RefCell::new(master));
 
     let platform = Platform::get();
     let reader_task = spawn_forever({
@@ -125,7 +146,7 @@ pub(crate) fn spawn_pty(
                 *buffer = new_buffer;
                 platform.send(UserEvent::RequestRedraw);
             }
-            // Channel closed — PTY exited
+            // Channel closed: PTY exited
             *writer.borrow_mut() = None;
             closer_notifier.notify();
             platform.send(UserEvent::RequestRedraw);
@@ -216,13 +237,29 @@ pub(crate) fn spawn_pty(
                             && let Some(writer) = &mut *writer.borrow_mut()
                         {
                             for response in responses {
-                                let _ = writer.write_all(&response);
+                                // Nonblocking shared OFD: retry partial writes
+                                // so DA/DSR replies are not dropped on WouldBlock.
+                                let _ = write_all_retrying_nonblocking(writer.as_mut(), &response);
                             }
                             let _ = writer.flush();
                         }
 
                         let _ = update_tx.unbounded_send(());
                         output_notifier.notify();
+                    }
+                    // Nonblocking PTY OFD (daemon-supplied masters often set
+                    // O_NONBLOCK on the shared open-file description): idle is
+                    // not EOF. `blocking::Unblock` returns immediately on
+                    // WouldBlock: back off so we do not busy-spin a pool worker.
+                    Err(e)
+                        if e.kind() == std::io::ErrorKind::WouldBlock
+                            || e.kind() == std::io::ErrorKind::Interrupted =>
+                    {
+                        let _ = blocking::unblock(|| {
+                            std::thread::sleep(std::time::Duration::from_millis(5));
+                        })
+                        .await;
+                        continue;
                     }
                     Err(_) => break,
                 }

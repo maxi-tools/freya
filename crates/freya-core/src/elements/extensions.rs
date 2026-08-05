@@ -1,69 +1,32 @@
 use std::{
     borrow::Cow,
-    hash::{
-        Hash,
-        Hasher,
-    },
+    hash::{Hash, Hasher},
 };
 
 use paste::paste;
-use rustc_hash::{
-    FxHashMap,
-    FxHasher,
-};
+use rustc_hash::{FxHashMap, FxHasher};
 use torin::{
     content::Content,
     gaps::Gaps,
-    prelude::{
-        Alignment,
-        Direction,
-        Length,
-        Position,
-        VisibleSize,
-    },
+    prelude::{Alignment, Direction, Length, Position, VisibleSize},
     size::Size,
 };
 
 use crate::{
-    data::{
-        AccessibilityData,
-        EffectData,
-        LayoutData,
-        Overflow,
-        TextStyleData,
-    },
+    data::{AccessibilityData, EffectData, LayoutData, Overflow, TextStyleData},
     diff_key::DiffKey,
-    element::{
-        Element,
-        EventHandlerType,
-    },
-    elements::image::{
-        AspectRatio,
-        ImageCover,
-        ImageData,
-        SamplingMode,
-    },
+    element::{Element, EventHandlerType},
+    elements::image::{AspectRatio, ImageCover, ImageData, SamplingMode},
     event_handler::EventHandler,
     events::{
-        data::{
-            Event,
-            KeyboardEventData,
-            MouseEventData,
-            SizedEventData,
-            WheelEventData,
-        },
+        data::{Event, KeyboardEventData, MouseEventData, SizedEventData, WheelEventData},
         name::EventName,
     },
     layers::Layer,
     prelude::*,
     style::{
-        font_size::FontSize,
-        font_slant::FontSlant,
-        font_weight::FontWeight,
-        font_width::FontWidth,
-        scale::Scale,
-        text_height::TextHeightBehavior,
-        text_overflow::TextOverflow,
+        font_size::FontSize, font_slant::FontSlant, font_weight::FontWeight, font_width::FontWidth,
+        scale::Scale, text_height::TextHeightBehavior, text_overflow::TextOverflow,
         text_shadow::TextShadow,
     },
 };
@@ -793,7 +756,13 @@ where
 pub trait EffectExt: Sized {
     fn get_effect(&mut self) -> &mut EffectData;
 
-    fn effect(mut self, effect: EffectData) -> Self {
+    fn effect(mut self, mut effect: EffectData) -> Self {
+        // Public EffectData fields let callers set glass_filter with the default
+        // version 0; mint a unique version so PartialEq / DiffModifies::EFFECT see
+        // the change (builder `.glass_filter` already uses next_glass_filter_version).
+        if effect.glass_filter.is_some() && effect.glass_filter_version == 0 {
+            effect.glass_filter_version = crate::data::next_glass_filter_version();
+        }
         *self.get_effect() = effect;
         self
     }
@@ -805,6 +774,13 @@ pub trait EffectExt: Sized {
 
     fn blur(mut self, blur: impl Into<f32>) -> Self {
         self.get_effect().blur = Some(blur.into());
+        self
+    }
+
+    fn glass_filter(mut self, filter: freya_engine::prelude::ImageFilter) -> Self {
+        let effect = self.get_effect();
+        effect.glass_filter_version = crate::data::next_glass_filter_version();
+        effect.glass_filter = Some(filter);
         self
     }
 
