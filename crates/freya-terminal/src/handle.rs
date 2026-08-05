@@ -205,6 +205,9 @@ impl TerminalHandle {
     /// handle.write(b"ls -la\n").unwrap();
     /// ```
     pub fn write(&self, data: &[u8]) -> Result<(), TerminalError> {
+        // Cancel pending inertial momentum on any write/input (post-tx review #11).
+        *self.scroll_velocity.borrow_mut() = 0.0;
+
         self.write_raw(data)?;
         let mut buffer = self.buffer.borrow_mut();
         buffer.selection = None;
