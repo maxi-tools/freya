@@ -70,15 +70,32 @@
 pub mod buffer;
 pub mod colors;
 pub mod element;
+#[cfg(unix)]
+pub mod fd_pty;
 pub mod handle;
 pub mod parser;
 pub mod pty;
 mod rendering;
 
+/// Test-only helpers shared across the crate's test modules.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use std::sync::Mutex;
+
+    /// Serializes tests that manipulate raw PTY file descriptors directly
+    /// (dup/close). Running them concurrently (the default for `cargo test`)
+    /// can race on OS-level fd number reuse across threads and trip
+    /// use-after-close safety checks in background reactor threads spun up
+    /// by other, unrelated tests.
+    pub(crate) static PTY_FD_TEST_LOCK: Mutex<()> = Mutex::new(());
+}
+
 /// Prelude module for convenient imports.
 pub mod prelude {
     pub use portable_pty::CommandBuilder;
 
+    #[cfg(unix)]
+    pub use crate::fd_pty::RawFdMasterPty;
     pub use crate::{
         buffer::{TerminalBuffer, TerminalSelection},
         element::Terminal,
