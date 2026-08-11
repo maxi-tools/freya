@@ -5,9 +5,21 @@
 
 name: CI
 
+# Cancel superseded PR runs, never main's.
+#
+# A superseded PR run was testing a stale merge base that gets re-verified once
+# main is integrated, so dropping it costs nothing. A push to main is the
+# opposite case: `github.ref` is `refs/heads/main` for every merge, so a single
+# shared group meant each merge cancelled the previous merge's verification, and
+# unlike a PR there is no later re-run — that commit has already shipped.
+#
+# This does not guarantee every main commit is tested. The group keeps one
+# running slot and one pending slot, and a newly queued run evicts whatever was
+# pending, so a burst of three or more merges still drops the middle ones. What
+# it does stop is a run that has already started being killed outright.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   push:
