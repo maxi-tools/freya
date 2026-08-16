@@ -31,10 +31,15 @@ keyboard-types = { workspace = true }
 portable-pty = "0.9"
 vt100 = "0.16"
 termwiz = "0.23"
+base64 = "0.22"
 
-# Async
+# Async (used by non-platform-gated pty.rs; must be available on every target).
 futures-channel = { workspace = true }
 futures-lite = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+anyhow = { workspace = true }
 
 [dev-dependencies]
 freya = { path = "../freya" }
