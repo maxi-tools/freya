@@ -39,7 +39,7 @@ Documentation is located in `./crates/freya/src/_docs`.
 - When doing commits ask for confirmation
 - Before committing and being finished make sure to run the formatter, linter and tests
 - Never leave debug logs after finishin
-- Never push to any branch, much less the `main` branch or using `--force`
+- Never push to `main`, and never use `--force`. Pushing a feature branch and opening a PR from it is fine
 - Never hardcode secrets or any other sensitive data
 - Avoid creating temporary branches unless told
 - When you are just starting to work on something you must not run any check or format command right away, leave that for the end and ask the developer for confirmation
