@@ -21,6 +21,14 @@ pub(crate) static FORCE_DUP_FAIL: std::sync::atomic::AtomicBool =
 
 /// Duplicate a file descriptor. Tests may force failure via [`FORCE_DUP_FAIL`]
 /// so poison-flag coverage does not require wrapping a closed fd in `OwnedFd`.
+///
+/// Uses `F_DUPFD_CLOEXEC` rather than plain `dup()`, which never sets
+/// `FD_CLOEXEC`. The descriptor being duplicated is a PTY master, so a
+/// non-close-on-exec copy is inherited by every process the host application
+/// later `exec`s — including the shells of *other* terminals. Those shells
+/// would then hold this master open, and closing this terminal would never
+/// deliver EOF/SIGHUP to its own shell. `F_DUPFD_CLOEXEC` is POSIX.1-2008 and
+/// returns the lowest available descriptor exactly as `dup()` does, or -1.
 fn dup_fd(fd: RawFd) -> i32 {
     #[cfg(test)]
     {
@@ -30,7 +38,7 @@ fn dup_fd(fd: RawFd) -> i32 {
         }
     }
     // SAFETY: caller must pass a valid open fd; on failure returns -1.
-    unsafe { libc::dup(fd) }
+    unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 0) }
 }
 
 /// A [`MasterPty`] implementation backed by an owned file descriptor.
@@ -163,11 +171,43 @@ impl MasterPty for RawFdMasterPty {
 
 #[cfg(test)]
 mod tests {
-    use std::os::unix::io::{FromRawFd, OwnedFd};
+    use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
 
     use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 
-    use crate::fd_pty::{FORCE_DUP_FAIL, RawFdMasterPty};
+    use crate::fd_pty::{FORCE_DUP_FAIL, RawFdMasterPty, dup_fd};
+
+    #[test]
+    fn dup_fd_sets_cloexec() {
+        // Every descriptor handed out by `try_clone_reader`/`take_writer` goes
+        // through `dup_fd`. If the duplicate were not close-on-exec it would be
+        // inherited by unrelated processes the app spawns later, which would
+        // keep this pty master open and stop the owning terminal from ever
+        // seeing EOF when it is closed.
+        let _guard = crate::test_support::PTY_FD_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let pty_system = native_pty_system();
+        let pair = pty_system.openpty(PtySize::default()).expect("openpty");
+        let raw_fd = pair.master.as_raw_fd().expect("as_raw_fd");
+
+        let duped = dup_fd(raw_fd);
+        assert!(duped >= 0, "dup_fd failed");
+        // SAFETY: `duped` was just returned by the successful `dup_fd()` above,
+        // so it is a valid, open, and otherwise-unowned descriptor; wrapping
+        // it in an `OwnedFd` gives it exactly one owner.
+        let owned = unsafe { OwnedFd::from_raw_fd(duped) };
+
+        // SAFETY: `owned` holds a valid, open descriptor for the duration of
+        // this call; `F_GETFD` only reads that descriptor's flags.
+        let flags = unsafe { libc::fcntl(owned.as_raw_fd(), libc::F_GETFD) };
+        assert!(flags >= 0, "F_GETFD failed");
+        assert_ne!(
+            flags & libc::FD_CLOEXEC,
+            0,
+            "a duplicated pty master must be close-on-exec"
+        );
+    }
 
     #[test]
     fn resize_on_real_pty() {
