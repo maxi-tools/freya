@@ -57,22 +57,47 @@ pub(crate) fn extract_buffer(
     }
 }
 
+/// Park a thread on `child` so it is reaped as soon as it exits.
+///
+/// Nothing else owns the child once setup succeeds: [`TerminalHandle`] holds
+/// only the master, and tearing the terminal down closes the master, which
+/// makes the shell exit on its own. But the handle `portable_pty` returns on
+/// unix is a [`std::process::Child`], which deliberately does *not* reap on
+/// drop, so simply dropping it leaves the exited shell as a zombie for the
+/// rest of the host program's life — one per terminal ever opened. A thread
+/// blocked in `wait()` collects it and then exits.
+///
+/// Returns the [`std::thread::JoinHandle`] so tests can observe the reap;
+/// production callers detach it deliberately.
+pub(crate) fn reap_in_background(
+    mut child: Box<dyn portable_pty::Child + Send + Sync>,
+) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    })
+}
+
 /// Attach a freshly spawned child to its master, wiring up the shared
 /// terminal lifecycle.
 ///
 /// If setup fails (e.g. a failed `take_writer()`/`try_clone_reader()`
 /// `dup()`), the already-spawned child is killed and reaped here so it isn't
-/// left orphaned/zombied by the early return.
+/// left orphaned/zombied by the early return. If setup succeeds, the child is
+/// handed to [`reap_in_background`] so it isn't zombied on exit either.
 pub(crate) fn attach_spawned_child(
     id: TerminalId,
     master: Box<dyn MasterPty + Send>,
     mut child: Box<dyn portable_pty::Child + Send + Sync>,
     scrollback_size: usize,
 ) -> Result<TerminalHandle, TerminalError> {
-    setup_terminal_from_master(id, master, scrollback_size).inspect_err(|_| {
+    let handle = setup_terminal_from_master(id, master, scrollback_size).inspect_err(|_| {
         let _ = child.kill();
         let _ = child.wait();
-    })
+    })?;
+
+    let _ = reap_in_background(child);
+
+    Ok(handle)
 }
 
 /// Spawn a PTY and return a TerminalHandle.
@@ -387,7 +412,39 @@ mod tests {
 
     use crate::fd_pty::RawFdMasterPty;
     use crate::handle::TerminalId;
-    use crate::pty::attach_spawned_child;
+    use crate::pty::{attach_spawned_child, reap_in_background};
+
+    #[test]
+    fn reap_in_background_reaps_exited_child() {
+        // The success path of `attach_spawned_child` drops its `Child` handle.
+        // `std::process::Child` does not reap on drop, so without the reaper
+        // thread the exited shell would linger as a zombie.
+        let _guard = crate::test_support::PTY_FD_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let pty_system = native_pty_system();
+        let pair = pty_system.openpty(PtySize::default()).expect("openpty");
+
+        let mut cmd = CommandBuilder::new("sleep");
+        cmd.arg("0");
+        let child = pair.slave.spawn_command(cmd).expect("spawn_command");
+        let pid = child.process_id().expect("process_id") as libc::pid_t;
+
+        reap_in_background(child).join().expect("reaper thread");
+
+        // Reaped by the thread, not merely exited: waitpid reports ECHILD.
+        let mut status = 0;
+        // SAFETY: `pid` is a valid pid obtained above and `status` is a
+        // valid, live mutable local; `waitpid()` only reads `pid` and writes
+        // through `status` for the duration of this call.
+        let wait_result = unsafe { libc::waitpid(pid, &mut status, 0) };
+        assert_eq!(wait_result, -1, "child should already be reaped");
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::ECHILD),
+            "expected ECHILD: no unreaped child should remain for this pid"
+        );
+    }
 
     #[test]
     fn attach_spawned_child_kills_and_reaps_child_when_setup_fails() {
