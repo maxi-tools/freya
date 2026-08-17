@@ -1,0 +1,19 @@
+AGENTS.md
+  s_b23c633ab77d8f::t_15385ae554998a 42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "cfc7123d4820a6282bebf7964c97fb36e175587c",
+  "prompts": {},
+  "sessions": {
+    "s_b23c633ab77d8f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82914612-8485-416c-adc8-f92043a9eaa3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Maxi Boch <874012+maxiboch@users.noreply.github.com>"
+    }
+  }
+}
