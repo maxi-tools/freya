@@ -9,7 +9,7 @@ use std::{
 
 use freya_core::{
     notify::ArcNotify,
-    prelude::{Platform, TaskHandle, UseId, UserEvent},
+    prelude::{Platform, TaskHandle, UserEvent},
 };
 use keyboard_types::{Key, Modifiers, NamedKey};
 use portable_pty::{MasterPty, PtySize};
@@ -31,6 +31,13 @@ pub struct TerminalId(pub usize);
 static NEXT_TERMINAL_ID: AtomicUsize = AtomicUsize::new(1);
 
 impl TerminalId {
+    /// Mint a new process-unique terminal id.
+    ///
+    /// This deliberately uses a plain atomic counter rather than the runtime's
+    /// [`freya_core::prelude::UseId`], so that a [`TerminalId`] can be created outside of a
+    /// component or hook context (tests, daemons, background setup). Per-instance stability is
+    /// the caller's responsibility and is already provided by constructing the terminal inside a
+    /// hook initializer such as `use_state`, which runs once per component instance.
     pub fn new() -> Self {
         Self(NEXT_TERMINAL_ID.fetch_add(1, Ordering::Relaxed))
     }
