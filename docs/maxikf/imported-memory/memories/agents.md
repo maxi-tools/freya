@@ -53,9 +53,10 @@ Documentation is located in `./crates/freya/src/_docs`.
 - When doing commits ask for confirmation
 - Before committing and being finished make sure to run the formatter, linter and tests
 - Never leave debug logs after finishing
-- Never push to any branch, much less the `main` branch or using `--force`
+- Never push to `main`, and never use `--force`
+- Pushing a feature branch to `origin` (the `maxi-tools/freya` fork) and opening a PR from it against `origin` is fine, and creating that one branch does not need to be asked for first. Never push to `upstream` (`marc2332/freya`) or open a PR against it. Note `gh pr create` targets the upstream parent by default, so pass `--repo maxi-tools/freya`
 - Never hardcode secrets or any other sensitive data
-- Avoid creating temporary branches unless told
+- Avoid creating other temporary branches unless told
 - When you are just starting to work on something you must not run any check or format command right away, leave that for the end and ask the developer for confirmation
 - Most hooks APIs like `use_state` return `Copy` values like `State`, when moving these around there is no need to `.clone()` them as they are `Copy` already.
 - Do not use em dash (—).
