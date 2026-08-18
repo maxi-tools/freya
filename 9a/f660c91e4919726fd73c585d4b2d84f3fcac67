@@ -1,0 +1,21 @@
+docs/maxikf/imported-memory/memories/agents.md
+  s_b23c633ab77d8f::t_a531929644f8f7 56-57,59
+AGENTS.md
+  s_b23c633ab77d8f::t_508a6c35339c98 42-43,45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9af660c91e4919726fd73c585d4b2d84f3fcac67",
+  "prompts": {},
+  "sessions": {
+    "s_b23c633ab77d8f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82914612-8485-416c-adc8-f92043a9eaa3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Maxi Boch <874012+maxiboch@users.noreply.github.com>"
+    }
+  }
+}
