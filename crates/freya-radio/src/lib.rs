@@ -71,13 +71,22 @@ pub mod slice;
 
 pub mod prelude {
     pub use freya_core::lifecycle::{
-        readable::{IntoReadable, Readable},
-        writable::{IntoWritable, Writable},
+        readable::{
+            IntoReadable,
+            Readable,
+        },
+        writable::{
+            IntoWritable,
+            Writable,
+        },
     };
 
     pub use crate::{
         hooks::*,
-        slice::{RadioSlice, RadioSliceMut},
+        slice::{
+            RadioSlice,
+            RadioSliceMut,
+        },
     };
 }
 

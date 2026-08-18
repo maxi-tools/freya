@@ -1,4 +1,7 @@
-use freya::{elements::image::Image, prelude::*};
+use freya::{
+    elements::image::Image,
+    prelude::*,
+};
 use freya_testing::prelude::*;
 
 #[test]

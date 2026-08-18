@@ -2,7 +2,11 @@ use std::f32::consts::PI;
 
 use crate::{
     node::Node,
-    prelude::{Direction, Gaps, VisibleSize},
+    prelude::{
+        Direction,
+        Gaps,
+        VisibleSize,
+    },
 };
 
 pub type AreaOf<T> = euclid::Rect<f32, T>;

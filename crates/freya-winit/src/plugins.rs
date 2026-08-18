@@ -1,14 +1,32 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
-
-use freya_core::integration::*;
-use freya_engine::prelude::{Canvas, FontCollection};
-pub use keyboard_types::{Code, Key, Modifiers};
-use winit::{
-    event_loop::EventLoopProxy,
-    window::{Window, WindowId},
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    rc::Rc,
 };
 
-use crate::renderer::{NativeEvent, NativeWindowEvent, NativeWindowEventAction};
+use freya_core::integration::*;
+use freya_engine::prelude::{
+    Canvas,
+    FontCollection,
+};
+pub use keyboard_types::{
+    Code,
+    Key,
+    Modifiers,
+};
+use winit::{
+    event_loop::EventLoopProxy,
+    window::{
+        Window,
+        WindowId,
+    },
+};
+
+use crate::renderer::{
+    NativeEvent,
+    NativeWindowEvent,
+    NativeWindowEventAction,
+};
 
 #[derive(Clone)]
 pub struct PluginHandle {

@@ -1,22 +1,53 @@
 //! Draw text with [label()]. Its a simplified version of [crate::elements::paragraph].
 
-use std::{any::Any, borrow::Cow, rc::Rc};
+use std::{
+    any::Any,
+    borrow::Cow,
+    rc::Rc,
+};
 
 use freya_engine::prelude::{
-    ClipOp, FontStyle, ParagraphBuilder, ParagraphStyle, SkParagraph, SkRect, TextStyle,
+    ClipOp,
+    FontStyle,
+    ParagraphBuilder,
+    ParagraphStyle,
+    SkParagraph,
+    SkRect,
+    TextStyle,
 };
 use rustc_hash::FxHashMap;
 use torin::prelude::Size2D;
 
 use crate::{
-    data::{AccessibilityData, EffectData, LayoutData, StyleState, TextStyleData},
+    data::{
+        AccessibilityData,
+        EffectData,
+        LayoutData,
+        StyleState,
+        TextStyleData,
+    },
     diff_key::DiffKey,
-    element::{ClipContext, Element, ElementExt, EventHandlerType, LayoutContext, RenderContext},
+    element::{
+        ClipContext,
+        Element,
+        ElementExt,
+        EventHandlerType,
+        LayoutContext,
+        RenderContext,
+    },
     events::name::EventName,
     layers::Layer,
     prelude::{
-        AccessibilityExt, ContainerExt, EventHandlersExt, KeyExt, LayerExt, LayoutExt, MaybeExt,
-        Span, TextAlign, TextStyleExt,
+        AccessibilityExt,
+        ContainerExt,
+        EventHandlersExt,
+        KeyExt,
+        LayerExt,
+        LayoutExt,
+        MaybeExt,
+        Span,
+        TextAlign,
+        TextStyleExt,
     },
     text_cache::CachedParagraph,
     tree::DiffModifies,

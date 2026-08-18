@@ -3,7 +3,10 @@
     windows_subsystem = "windows"
 )]
 
-use freya::{prelude::*, winit::monitor::MonitorHandle};
+use freya::{
+    prelude::*,
+    winit::monitor::MonitorHandle,
+};
 
 fn main() {
     launch(LaunchConfig::new().with_future(|proxy| async move {

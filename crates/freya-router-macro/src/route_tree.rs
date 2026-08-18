@@ -5,10 +5,19 @@ use syn::Ident;
 
 use crate::{
     RouteEndpoint,
-    nest::{Nest, NestId},
+    nest::{
+        Nest,
+        NestId,
+    },
     redirect::Redirect,
-    route::{Route, RouteType},
-    segment::{RouteSegment, static_segment_idx},
+    route::{
+        Route,
+        RouteType,
+    },
+    segment::{
+        RouteSegment,
+        static_segment_idx,
+    },
 };
 
 #[derive(Debug, Clone, Default)]

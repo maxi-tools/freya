@@ -4,16 +4,36 @@
 extern crate proc_macro;
 
 use layout::Layout;
-use nest::{Nest, NestId};
+use nest::{
+    Nest,
+    NestId,
+};
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{__private::Span, ToTokens, format_ident, quote};
+use quote::{
+    __private::Span,
+    ToTokens,
+    format_ident,
+    quote,
+};
 use redirect::Redirect;
-use route::{Route, RouteType};
+use route::{
+    Route,
+    RouteType,
+};
 use segment::RouteSegment;
-use syn::{Ident, Token, Type, parse::ParseStream, parse_macro_input};
+use syn::{
+    Ident,
+    Token,
+    Type,
+    parse::ParseStream,
+    parse_macro_input,
+};
 
-use crate::{layout::LayoutId, route_tree::ParseRouteTree};
+use crate::{
+    layout::LayoutId,
+    route_tree::ParseRouteTree,
+};
 
 mod hash;
 mod layout;

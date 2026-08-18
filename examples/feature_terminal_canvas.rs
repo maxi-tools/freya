@@ -3,7 +3,13 @@
     windows_subsystem = "windows"
 )]
 
-use freya::{clipboard::Clipboard, icons, prelude::*, radio::*, terminal::*};
+use freya::{
+    clipboard::Clipboard,
+    icons,
+    prelude::*,
+    radio::*,
+    terminal::*,
+};
 use portable_pty::CommandBuilder;
 
 #[derive(Default, Clone)]

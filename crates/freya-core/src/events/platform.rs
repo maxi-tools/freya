@@ -1,14 +1,24 @@
 use std::path::PathBuf;
 
-use keyboard_types::{Code, Key, Modifiers};
+use keyboard_types::{
+    Code,
+    Key,
+    Modifiers,
+};
 use torin::prelude::CursorPoint;
 
 use crate::{
     events::{
-        data::{MouseButton, WheelSource},
+        data::{
+            MouseButton,
+            WheelSource,
+        },
         name::EventName,
     },
-    prelude::{Force, TouchPhase},
+    prelude::{
+        Force,
+        TouchPhase,
+    },
 };
 
 #[derive(Clone, Debug, PartialEq, Copy, Eq, Hash)]

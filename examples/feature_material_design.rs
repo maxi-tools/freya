@@ -3,7 +3,10 @@
     windows_subsystem = "windows"
 )]
 
-use freya::{material_design::*, prelude::*};
+use freya::{
+    material_design::*,
+    prelude::*,
+};
 
 fn main() {
     launch(LaunchConfig::new().with_window(WindowConfig::new(app).with_size(550., 600.)))

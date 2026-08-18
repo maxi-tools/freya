@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::time::{
+    Duration,
+    Instant,
+};
 
 use async_io::Timer;
 use freya_core::prelude::*;

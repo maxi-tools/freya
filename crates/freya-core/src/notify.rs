@@ -3,8 +3,16 @@ use std::{
     future::Future,
     pin::Pin,
     rc::Rc,
-    sync::{Arc, Mutex, atomic::AtomicBool},
-    task::{Context, Poll, Waker},
+    sync::{
+        Arc,
+        Mutex,
+        atomic::AtomicBool,
+    },
+    task::{
+        Context,
+        Poll,
+        Waker,
+    },
 };
 
 #[derive(Clone, Default)]

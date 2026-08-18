@@ -1,8 +1,16 @@
 use std::time::Duration;
 
 use crate::{
-    easing::{Function, apply_value},
-    hook::{AnimDirection, AnimatedValue, Ease, ReadAnimatedValue},
+    easing::{
+        Function,
+        apply_value,
+    },
+    hook::{
+        AnimDirection,
+        AnimatedValue,
+        Ease,
+        ReadAnimatedValue,
+    },
 };
 
 /// Animate a numeric value.

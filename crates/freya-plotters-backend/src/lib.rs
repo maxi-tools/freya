@@ -13,8 +13,16 @@ use std::error::Error;
 
 use freya_engine::prelude::*;
 use plotters_backend::{
-    BackendCoord, BackendStyle, BackendTextStyle, DrawingBackend, DrawingErrorKind, rasterizer,
-    text_anchor::{HPos, VPos},
+    BackendCoord,
+    BackendStyle,
+    BackendTextStyle,
+    DrawingBackend,
+    DrawingErrorKind,
+    rasterizer,
+    text_anchor::{
+        HPos,
+        VPos,
+    },
 };
 
 #[derive(Debug)]

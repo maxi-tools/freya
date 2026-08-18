@@ -4,8 +4,14 @@
 )]
 use std::time::Duration;
 
-use freya::{prelude::*, sdk::use_timeout};
-use tracing_subscriber::{EnvFilter, FmtSubscriber};
+use freya::{
+    prelude::*,
+    sdk::use_timeout,
+};
+use tracing_subscriber::{
+    EnvFilter,
+    FmtSubscriber,
+};
 
 fn main() {
     let subscriber = FmtSubscriber::builder()

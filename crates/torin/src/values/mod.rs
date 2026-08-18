@@ -8,6 +8,12 @@ pub mod visible_size;
 
 pub mod prelude {
     pub use crate::{
-        alignment::*, content::*, direction::*, gaps::*, position::*, size::*, visible_size::*,
+        alignment::*,
+        content::*,
+        direction::*,
+        gaps::*,
+        position::*,
+        size::*,
+        visible_size::*,
     };
 }

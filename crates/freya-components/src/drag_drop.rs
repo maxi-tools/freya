@@ -1,4 +1,7 @@
-use freya_core::{prelude::*, scope_id::ScopeId};
+use freya_core::{
+    prelude::*,
+    scope_id::ScopeId,
+};
 use torin::prelude::*;
 
 #[derive(Clone, Copy)]

@@ -1,12 +1,19 @@
 use std::{
-    cell::{Ref, RefMut},
+    cell::{
+        Ref,
+        RefMut,
+    },
     marker::PhantomData,
     rc::Rc,
 };
 
 use freya_core::prelude::*;
 
-use crate::hooks::{Radio, RadioChannel, RadioStation};
+use crate::hooks::{
+    Radio,
+    RadioChannel,
+    RadioStation,
+};
 
 /// A read-only slice of a portion of the global radio state.
 ///

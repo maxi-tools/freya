@@ -2,11 +2,17 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     hash::Hash,
-    ops::{Deref, DerefMut},
+    ops::{
+        Deref,
+        DerefMut,
+    },
     rc::Rc,
 };
 
-use freya_core::{integration::FxHashSet, prelude::*};
+use freya_core::{
+    integration::FxHashSet,
+    prelude::*,
+};
 
 #[cfg(feature = "tracing")]
 pub trait RadioChannel<T>: 'static + PartialEq + Eq + Clone + Hash + std::fmt::Debug + Ord {
@@ -260,7 +266,11 @@ where
         #[cfg(feature = "tracing")]
         {
             use itertools::Itertools;
-            use tracing::{Level, info, span};
+            use tracing::{
+                Level,
+                info,
+                span,
+            };
 
             let mut channels_subscribers = HashMap::<&Channel, usize>::new();
 

@@ -2,7 +2,12 @@ use std::hash::Hash;
 
 use freya_engine::prelude::SkParagraph;
 
-use crate::{data::TextStyleState, lru_cache::LRUCache, node_id::NodeId, prelude::Span};
+use crate::{
+    data::TextStyleState,
+    lru_cache::LRUCache,
+    node_id::NodeId,
+    prelude::Span,
+};
 
 pub struct CachedParagraph<'a> {
     pub text_style_state: &'a TextStyleState,
