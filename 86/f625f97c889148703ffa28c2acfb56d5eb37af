@@ -1,0 +1,641 @@
+crates/freya-core/src/accessibility/groups.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/torin/tests/root_candidate_resolution.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-core/src/hooks/use_id.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-9
+examples/feature_tray_radio_state.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 9-15
+examples/window_on_close.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-router-macro/src/nest.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-9,11-15
+crates/torin/src/tree_adapter.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,11-18
+crates/freya-engine/src/mocked.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 305-310,2012-2017,2194-2197,2215-2220
+crates/torin/tests/alignment.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5
+examples/component_input_form.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9
+crates/freya-winit/src/tray_icon.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-components/src/progressbar.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,10-13,15-18
+crates/freya-core/src/lifecycle/effect.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,8-13
+crates/freya-core/src/reactive_context.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,14-19
+ruff.toml
+  s_b23c633ab77d8f::t_af5df42b98499a 17-20,22-24,27-36,43
+crates/freya-core/src/tree_layout_adapter.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8,13-16
+crates/freya-core/src/events/measurer.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-8
+crates/freya-components/src/scrollviews/scrollthumb.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-10
+crates/torin/tests/offset.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5
+crates/freya-core/src/style/color.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-8
+crates/freya-edit/src/text_editor.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-6,9-13
+crates/freya-android/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-10,13-17
+crates/freya-components/src/theming/component_themes.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,6-9
+crates/torin/src/measure.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9,12-26,31-35
+crates/freya-components/src/loader.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-core/src/events/platform.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-7,12-15,18-21
+crates/freya-engine/src/skia.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-6,12-60,63-67,69-89,92-97,103-106,111-135
+examples/animation_sequential.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-plotters-backend/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 16-25
+crates/freya-radio/src/readable.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,11-14
+crates/freya-winit/src/renderer.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-6,10-13,15-23,25-28,33-53,58-61,64-68,70-75
+crates/torin/tests/padding.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-components/src/drag_drop.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-testing/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 44-47,50-61,63-78,82-85,87-92
+crates/ragnarok/src/measurer.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-14
+crates/freya-core/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 40-45,52-55,64-71,80-104,113-123,130-145,157-163,168-178,186-189
+crates/freya-components/src/switch.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-8,10-13
+crates/freya-animation/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-14
+crates/freya-core/src/runner.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-9,15-18,21-24,29-33,35-38,43-46,48-52
+crates/freya-core/src/diff_key.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-components/src/overflowed_content.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-9,11-15
+crates/freya-core/src/text_cache.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-10
+examples/feature_element.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-10,13-16,19-21
+crates/freya-components/src/scrollviews/scrollview.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-11,16-19,21-27
+examples/images_slideshow.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-components/src/floating_tab.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,7-11
+crates/freya-core/src/lifecycle/reactive.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5
+crates/torin/tests/position.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5
+examples/component_ripple.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9
+crates/freya-router/src/components/router.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-8
+crates/freya-core/src/platform.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 7-10
+crates/freya-core/src/elements/image.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-9,13-20,26-32,34-41,45-55
+examples/floating_panel.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 7-10,13-16
+crates/freya-core/src/hooks/previous_and_current.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-8
+crates/freya-core/src/lifecycle/base.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-7
+examples/massive.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-material-design/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 27-34
+crates/freya-components/src/chip.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,7-11
+crates/freya-core/src/node_id.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5
+crates/freya-router-macro/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 7-10,13-18,20-23,25-31,33-36
+crates/freya-router-macro/src/redirect.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-8,15-19
+crates/freya-sdk/src/timeout.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-components/src/draggable_canvas.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-8
+crates/freya-webview/src/plugin.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-10,14-18,21-28
+crates/freya-core/tests/events.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5
+crates/freya-core/src/accessibility/dirty_nodes.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,6-9
+crates/freya-router/src/routable.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-9
+crates/freya-core/src/elements/rect.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-7,10-21,24-27,31-37,44-47
+examples/feature_terminal.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5
+crates/freya-components/src/cache.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-9,15-18
+crates/torin/src/custom_measurer.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-11
+crates/freya-i18n/tests/macro_reexport_spec.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-10,14-17
+crates/freya-devtools-app/src/tabs/tree.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 9-13
+crates/freya-terminal/src/handle.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,9-12,18-31,36-39,41-44,47-52,199-204
+examples/feature_router_complex.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9
+crates/freya-components/src/activable_route.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5
+crates/freya-components/src/segmented_button.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,7-11
+examples/feature_i18n.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-11
+examples/hackernews.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9,11-18
+crates/freya-i18n/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 77-82,84-90
+crates/freya-core/src/events/executor.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-11
+crates/freya-router-macro/src/hash.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6
+crates/freya-core/src/path_element.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,10-14
+crates/freya-core/src/events/data.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,11-15
+examples/android/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-6,18-21
+crates/freya-router/src/hooks/use_route.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+examples/state_radio.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-core/src/event_handler.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-core/src/lifecycle/memo.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,8-13
+crates/freya-devtools-app/src/tabs/style.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-components/src/slider.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7
+crates/freya-core/src/layers.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,6-9
+crates/freya-edit/src/use_editable.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-11
+crates/freya-components/src/context_menu.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-components/src/markdown.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,7-14,20-23,25-28,31-37
+crates/freya-i18n/tests/defects_spec.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-6,10-13
+crates/freya-query/src/query.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,12-15,21-25,29-32
+crates/freya-components/src/image_viewer.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8,15-22,26-29
+crates/freya-webview/src/element.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-8,11-17,19-23,27-33,39-42
+crates/freya-radio/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 74-81,86-89
+examples/feature_multi_window_state.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 7-11,13-17
+examples/feature_terminal_canvas.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-12
+examples/state_query.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6
+crates/freya-edit/src/editor_history.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,207-210
+crates/freya-components/src/popup.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7,11-14
+crates/freya-components/src/calendar.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-13,15-20,23-29
+crates/freya-components/src/theming/themes.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7,19-26,31-34,36-39,45-48,52-55,58-61
+crates/freya-icons/build.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/ragnarok/src/nodes_state.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,6-13
+crates/ragnarok/src/source.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/ragnarok/tests/state.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,9-18
+examples/feature_router.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9
+crates/freya-winit/src/plugins.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5,8-16,19-22,25-29
+crates/freya-core/src/events/emittable.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,10-14,21-24
+crates/freya-components/src/button.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,7-10
+examples/android/src/app/routes/scroll.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-sdk/src/tokio/watch.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5
+crates/freya-components/src/table.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-7,9-13
+crates/freya-router-macro/src/route.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,7-15,21-28,30-34
+crates/freya-components/src/animated_router.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7
+crates/freya-components/src/resizable_container.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-9,13-16
+crates/freya-devtools-app/src/state.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,11-19
+crates/freya-core/src/events_combos.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,10-13
+crates/freya-performance-plugin/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,11-22,25-31,33-37
+crates/freya-core/src/scope_id.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-devtools-app/src/main.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,10-13,15-19,22-29,40-45
+crates/freya-components/src/link.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,8-13
+crates/freya-terminal/src/element.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-6,9-12,14-20,27-38,41-44,49-52
+crates/freya-winit/src/accessibility.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-winit/src/drivers/mod.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 12-15
+crates/torin/tests/other.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5
+crates/freya-animation/src/hook.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6
+examples/component_sidebar.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9
+crates/freya-components/src/theming/extensions.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-winit/src/drivers/vulkan.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,10-16,18-60,65-78,83-86
+examples/animation_router.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-10
+crates/freya-core/src/accessibility/tree.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-8,10-17,21-23,27-30,32-38
+crates/freya-devtools-app/src/tabs/text_style.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-i18n/tests/config.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-components/src/radio_item.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-router-macro/src/route_tree.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-11,13-20
+examples/text_editing.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-components/src/scrollviews/virtual_scrollview.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,8-13,16-19,21-27
+crates/freya-components/src/scrollviews/scrollbar.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-7,12-17
+crates/freya-radio/tests/radio.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+examples/ai-chat/src/main.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-11
+crates/freya-webview/src/component.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,12-15
+crates/freya-components/tests/image_viewer.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-core/src/data.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7,11-14,21-24,28-31,33-36,38-52
+crates/freya-components/src/icons/arrow.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-6
+crates/freya-core/src/scope.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,9-14,20-23
+crates/freya-components/src/activable_route_context.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-radio/src/writable.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,6-9
+crates/torin/src/values/position.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-9
+crates/freya-components/src/menu.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-9,13-16
+crates/freya-core/src/cursor.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6
+crates/torin/tests/wrap.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5
+examples/kanban.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-11
+crates/freya-core/src/lifecycle/context.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,6-10
+crates/freya-core/src/animation_clock.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7
+crates/freya-devtools/src/plugin.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7,12-23,26-30,38-42
+crates/freya-router-macro/src/layout.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-components/src/icons/tick.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-6
+crates/ragnarok/src/potential_event.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5
+crates/freya-code-editor/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 14-17,20-25,30-36
+crates/freya-animation/src/anim_color.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-15
+crates/freya-winit/src/config.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-7,10-13,17-22,26-29
+crates/torin/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 24-32
+crates/freya-router-macro/src/segment.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-13,15-18
+crates/freya-android/src/keyboard.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-6
+crates/freya-core/src/elements/extensions.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,10-13,17-23,28-34,36-45,48-54,60-66
+examples/floating_dock.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 7-11,14-17,21-24
+crates/freya-router/src/components/child_router.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-7
+crates/freya-winit/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 9-14,29-32,55-59,138-145
+crates/freya-winit/src/winit_mappings.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-13
+crates/freya-core/src/lifecycle/state.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,12-16,20-24
+crates/freya-radio/src/hooks/use_radio.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8,12-15,269-273
+examples/feature_tray.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-14
+crates/freya-components/src/input.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,14-19,23-28
+crates/freya-i18n/src/i18n.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,6-10
+examples/component_floating_tab.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9
+crates/freya-router/src/components/outlet.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/torin/src/geometry.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-9
+crates/torin/tests/spacing.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-core/src/current_context.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5,10-13
+examples/animation_color.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+examples/feature_code_editor.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-11
+crates/freya-devtools/src/server.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-9,15-18,21-25,32-36
+crates/freya-components/src/card.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7
+crates/freya-components/src/checkbox.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-9
+crates/freya-material-design/src/ripple.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-10
+crates/freya-devtools-app/src/tabs/layout.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-radio/tests/writable_readable.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,6-9
+crates/freya-components/src/select.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-10
+crates/freya-core/src/accessibility/screen_reader.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6
+crates/freya-code-editor/src/editor_line.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-13,15-19
+crates/freya-components/src/accordion.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-6,8-11,13-16
+crates/freya-core/src/helpers.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,12-15
+crates/torin/src/values/gaps.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6
+crates/freya-router-macro/src/query.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6
+examples/feature_canvas.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9
+examples/animation_position.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-winit/src/window.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-7,10-29,34-37,41-44,46-51,56-59,61-70
+crates/freya-components/src/gif_viewer.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7,9-12,23-27,32-48,55-58
+crates/freya-material-design/src/floating_tab.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7
+crates/freya-components/src/sidebar.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,7-11
+crates/freya/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 90-93,95-105,127-131,182-187,207-210
+crates/freya-components/src/theming/macros.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7
+crates/freya-core/src/lifecycle/task.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8,12-15
+examples/android/src/main.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5
+crates/freya-core/src/accessibility/id.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,9-12
+crates/freya-core/src/style/border.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6
+crates/freya-radio/src/slice.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,12-16
+crates/freya-terminal/src/rendering.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,6-9,11-18
+crates/ragnarok/src/emmitable.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-core/tests/diffing.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,14-17
+crates/freya-engine/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 16-37
+crates/freya-winit/src/drivers/metal.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-13,18-22,25-32,36-39
+examples/feature_multi_monitor.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9
+crates/torin/tests/flex.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,7-10
+crates/freya-animation/src/anim_sequential.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6
+crates/torin/src/values/size.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5,9-13
+crates/freya-devtools/src/outgoing.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-core/src/style/gradient.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6
+crates/freya-components/src/tooltip.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-12,18-21,23-24
+examples/feature_plot_3d.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 10-25
+crates/freya-query/src/mutation.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,12-15,21-25
+crates/torin/benches/bench.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,6-10
+examples/sdk_watch.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-11
+crates/freya-core/src/style/fill.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,11-15
+crates/freya-devtools-app/src/property.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7
+crates/freya-i18n/tests/graceful_fallback_spec.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5,7-10
+crates/freya-edit/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 13-16
+crates/freya-animation/src/easing.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-devtools-app/src/components/attribute.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-10
+crates/freya-components/src/scrollviews/shared.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5
+crates/freya-material-design/src/button.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-terminal/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 100-103,105-109
+crates/freya-material-design/src/sidebar.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+examples/feature_custom_event_loop.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9
+examples/component_table.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 9-12
+crates/ragnarok/src/measurement.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-9
+crates/freya-terminal/src/fd_pty.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 9-12,14-19,24-27,185-202
+crates/freya-router/src/contexts/router.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-6,8-11,14-18
+examples/animation_portal.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 7-10
+examples/dev_perf.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-11
+crates/freya-android/src/status_bar.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-6
+crates/freya-core/src/render_pipeline.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-9,13-16
+crates/freya-core/src/notify.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-15
+crates/freya-core/src/user_event.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+examples/website.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-10
+crates/freya-components/src/color_picker.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-10,15-21,26-31
+examples/animation_infinity.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-code-editor/src/editor_ui.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-7,14-17
+crates/freya-webview/src/lifecycle.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,9-12
+crates/freya-core/src/elements/paragraph.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 7-10,15-24,31-36,40-46,50-64
+crates/freya-router/src/contexts/outlet.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-6,8-11
+crates/torin/src/values/mod.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 11-17
+crates/freya-components/src/theming/hooks.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-9
+crates/freya-core/src/accessibility/focus.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5,9-16,18-25
+crates/freya-winit/src/drivers/gl.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,7-20,23-26,28-31,34-47,54-57
+crates/freya-query/src/captured.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6
+examples/state_mutation.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6
+examples/animation_transition.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-core/tests/writable_readable.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-devtools/src/node_info.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-16,19-22,28-35
+crates/freya-winit/src/extensions.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-9,14-17,21-24
+examples/animation_virtual_scrollview.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-core/src/element.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-6,8-14,17-21,26-33,38-44,51-55,57-60
+examples/android/src/app/routes/portal.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-7
+crates/freya-animation/src/anim_num.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-13
+crates/freya-core/src/elements/svg.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-9,12-18,20-23,26-32,34-41,45-51
+examples/android/src/app/routes/editor.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5
+examples/window_customization.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+examples/feature_icons.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-8
+crates/freya-query/tests/mutation_tests.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4
+crates/freya-core/src/tree.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7,13-16,19-22,24-32,37-46,49-52,57-61,64-70
+examples/feature_material_design.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9
+crates/torin/src/torin.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,12-27
+crates/ragnarok/src/executor.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-7
+examples/android/src/app/routes/widgets.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,7-12
+crates/freya-edit/tests/edit.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6
+crates/freya-router/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 78-81,83-87,103-107
+crates/freya-components/src/integration.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5,8-11
+crates/freya-i18n/tests/translations_spec.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-11,14-17
+examples/state_radio_thread.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 7-10,14-17
+crates/torin/tests/margin.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5
+examples/android/src/app/mod.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-8
+crates/freya-code-editor/src/syntax.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-15,18-21
+crates/freya-components/src/portal.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-5,8-11,13-16
+crates/freya-core/src/lru_cache.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5,9-12
+crates/freya-edit/src/event.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-6,11-17
+crates/freya-devtools/src/incoming.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5
+crates/freya-webview/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 37-40
+crates/freya-code-editor/src/editor_data.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7,11-14,20-23
+examples/dev_intensive.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 7-14
+examples/plugin_performance.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9
+crates/freya-code-editor/src/metrics.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-10
+examples/shader_editor.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 5-11,13-21,23-30
+crates/torin/tests/size.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5
+examples/state_query_sqlite/src/main.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9,11-14
+examples/component_portal.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 6-9,13-20
+crates/freya-core/src/extended_hashmap.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-6
+crates/freya-components/src/attached.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 2-5
+crates/freya-edit/src/rope_editor.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-4,6-9,13-20,356-360
+crates/freya-components/src/canvas.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-7,9-18
+crates/freya-components/src/titlebar.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7
+crates/freya-router/src/navigation.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 4-7,11-14,17-18
+crates/torin/src/node.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 8-12
+crates/freya-terminal/src/pty.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 1-7,11-16,20-25,27-33,40-45,435-454
+crates/freya-query/src/lib.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 202-206
+crates/freya-core/src/elements/label.rs
+  s_b23c633ab77d8f::t_561d3fffb4eaa6 3-7,10-16,22-28,30-37,41-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "86f625f97c889148703ffa28c2acfb56d5eb37af",
+  "prompts": {},
+  "sessions": {
+    "s_b23c633ab77d8f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82914612-8485-416c-adc8-f92043a9eaa3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Maxi Boch <874012+maxiboch@users.noreply.github.com>"
+    }
+  }
+}
