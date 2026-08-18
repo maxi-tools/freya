@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  test-linux:
+  test:
     runs-on: ${{ matrix.os }}
     concurrency:
       group: rust-test-${{ matrix.os }}-${{ github.ref_name }}
