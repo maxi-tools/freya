@@ -9,7 +9,7 @@ use std::{
 
 use freya_core::{
     notify::ArcNotify,
-    prelude::{Platform, TaskHandle, UseId, UserEvent},
+    prelude::{Platform, TaskHandle, UserEvent},
 };
 use keyboard_types::{Key, Modifiers, NamedKey};
 use portable_pty::{MasterPty, PtySize};
@@ -31,6 +31,13 @@ pub struct TerminalId(pub usize);
 static NEXT_TERMINAL_ID: AtomicUsize = AtomicUsize::new(1);
 
 impl TerminalId {
+    /// Mint a new process-unique terminal id.
+    ///
+    /// This deliberately uses a plain atomic counter rather than the runtime's
+    /// [`freya_core::prelude::UseId`], so that a [`TerminalId`] can be created outside of a
+    /// component or hook context (tests, daemons, background setup). Per-instance stability is
+    /// the caller's responsibility and is already provided by constructing the terminal inside a
+    /// hook initializer such as `use_state`, which runs once per component instance.
     pub fn new() -> Self {
         Self(NEXT_TERMINAL_ID.fetch_add(1, Ordering::Relaxed))
     }
@@ -895,5 +902,37 @@ impl TerminalHandle {
         parser.screen_mut().set_scrollback(saved_scrollback);
 
         Some(lines.join("\n"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::handle::TerminalId;
+
+    /// Minting an id must not require a component or hook context.
+    ///
+    /// This is the property that rules out `UseId::<TerminalId>::get_in_hook()`, which needs a
+    /// live runtime. `TerminalId::new` is public API and is called from plain functions by the
+    /// pty tests and by daemon and background setup paths, so the bare call below is the
+    /// assertion: on a plain test thread there is no runtime for a hook to attach to.
+    #[test]
+    fn new_works_outside_any_hook_context() {
+        let first = TerminalId::new();
+        assert_ne!(first, TerminalId::new());
+    }
+
+    /// Ids identify terminal instances and are used as reconciliation keys, so they must never
+    /// repeat within a process.
+    #[test]
+    fn new_yields_unique_increasing_ids() {
+        let ids = (0..64).map(|_| TerminalId::new().0).collect::<Vec<_>>();
+
+        // Compared relatively rather than against fixed values: the counter is process-global,
+        // so other tests in the same binary consume from it concurrently. Strictly increasing
+        // still holds for one thread's own successive reads, and implies uniqueness.
+        assert!(
+            ids.windows(2).all(|pair| pair[1] > pair[0]),
+            "expected strictly increasing ids, got {ids:?}"
+        );
     }
 }
