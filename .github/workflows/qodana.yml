@@ -1,10 +1,17 @@
 # Shared Qodana CI workflow for maxi-tools repos.
 # Source of truth: maxi-config/workflows/qodana.yml
+#
+# Rolled out with `just ci-audit --root ~/Dev/maxi-tools --apply-qodana`, which
+# copies this file into every repo that already has .github/workflows/qodana.yml
+# and rewrites the QODANA_TOKEN expression to whatever that repo already used.
 
-name: Qodana
+name: CI / merge-gate
 
 on:
   workflow_dispatch:
+  schedule:
+    # Off-hours full scan. PRs get the fast qodana sentinel below.
+    - cron: '42 8 * * *'
   push:
     branches: [master, main]
     paths:
@@ -12,50 +19,171 @@ on:
       - '**/Cargo.toml'
       - '**/Cargo.lock'
       - 'qodana.yaml'
+      - 'workflows/qodana.yml'
+      - '.github/workflows/qodana.yml'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
     paths:
       - '**/*.rs'
       - '**/Cargo.toml'
       - '**/Cargo.lock'
       - 'qodana.yaml'
+      - 'workflows/qodana.yml'
+      - '.github/workflows/qodana.yml'
 
 concurrency:
-  group: qodana-${{ github.repository }}-${{ github.ref }}
+  group: qodana-${{ github.repository }}-${{ github.ref }}-${{ github.event_name == 'schedule' && 'nightly' || 'interactive' }}
   cancel-in-progress: true
 
 permissions: {}
 
 env:
-  RUSTROVER_HOME: /Applications/RustRover.app/Contents
-  JAVA_HOME: /Applications/RustRover.app/Contents/jbr/Contents/Home
+  CI_ENFORCEMENT_MODE: ${{ vars.CI_ENFORCEMENT_MODE || 'degraded' }}
+  CI_DEGRADED_UNTIL: ${{ vars.CI_DEGRADED_UNTIL }}
 
 jobs:
   qodana:
-    runs-on: [self-hosted, macOS, ram16]
-    timeout-minutes: 20
+    # Keep the required PR check cheap. The real scan is in qodana-full.
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
-      contents: write
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate Qodana config (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ -f qodana.yaml ]; then
+            test -s qodana.yaml
+          else
+            echo "qodana.yaml not found; skipping config validation."
+          fi
+
+
+      - name: Degraded mode merge gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          github_step_summary() {
+            printf '%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          mode="${CI_ENFORCEMENT_MODE:-degraded}"
+          until="${CI_DEGRADED_UNTIL:-}"
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          github_step_summary "## CI economy gate"
+          github_step_summary ""
+          github_step_summary "- CI_ENFORCEMENT_MODE: \`$mode\`"
+          github_step_summary "- CI_DEGRADED_UNTIL: \`${until:-unset}\`"
+          github_step_summary "- Full Qodana scan: runs for schedule/manual, strict mode, or same-repo PRs labeled \`run-qodana\`."
+          github_step_summary ""
+          github_step_summary "## Workflow lane summary"
+          github_step_summary "- merge-gate: qodana sentinel ran on WarpBuild"
+          github_step_summary "- full-scan: qodana-full is deferred unless this event requests the full scan"
+          github_step_summary "- qodana-full runs only for schedule/workflow_dispatch, strict mode, or same-repo PRs labeled \`run-qodana\`"
+
+          case "$mode" in
+            strict)
+              github_step_summary "- Gate result: strict mode; heavy jobs are blocking."
+              ;;
+            degraded|"")
+              if [ -z "$until" ]; then
+                github_step_summary "- Gate result: failed; CI_DEGRADED_UNTIL is required in degraded mode."
+                echo "::error::CI_DEGRADED_UNTIL is required when CI_ENFORCEMENT_MODE=degraded"
+                exit 1
+              fi
+              if [[ "$now" > "$until" || "$now" == "$until" ]]; then
+                github_step_summary "- Gate result: failed; degraded mode expired at \`$until\`."
+                echo "::error::degraded CI mode expired at $until; extend CI_DEGRADED_UNTIL or restore strict mode"
+                exit 1
+              fi
+              github_step_summary "- Gate result: degraded mode active until \`$until\`."
+              ;;
+            *)
+              github_step_summary "- Gate result: failed; unknown CI_ENFORCEMENT_MODE \`$mode\`."
+              echo "::error::unknown CI_ENFORCEMENT_MODE: $mode"
+              exit 1
+              ;;
+          esac
+
+
+  qodana-full:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || vars.CI_ENFORCEMENT_MODE == 'strict' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'run-qodana'))
+    continue-on-error: ${{ vars.CI_ENFORCEMENT_MODE != 'strict' }}
+    # Qodana for Rust ships only as a Docker image, so this lane needs a
+    # container runtime -- which is a CAPABILITY, not a hardware fact, and so is
+    # selected on rather than assumed. `container-runtime` is a probe-derived capability
+    # label (ci/runner-labels.toml): reconcile revokes it when `docker info`
+    # stops answering, so a box that loses its runtime leaves the lane instead
+    # of failing every job routed onto it.
+    #
+    # That revocation is the whole point. The previous container job in this
+    # repo (qodana-config-upload.yml) hardcoded a Colima socket at
+    # /Users/maxi/.colima/default/docker.sock, the daemon went away in July, and
+    # every run since has died on "no such file or directory" -- selecting on a
+    # path instead of a capability.
+    #
+    # tier-fast for the same reason as the old RustRover lane (maxi-core#3659):
+    # a full inspection is heavy work. On OrbStack these boxes run the
+    # linux/arm64 image natively -- no QEMU -- so an M5 Max here beats a 2-core
+    # ubuntu-latest by a wide margin and costs nothing.
+    runs-on: [self-hosted, macOS, ARM64, tier-fast, container-runtime]
+    timeout-minutes: 30
+    permissions:
+      contents: read
       pull-requests: write
       checks: write
       security-events: write
     env:
-      QODANA_TOKEN: ${{ secrets.QODANA_TOKEN_852821425 }}
+      QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
     steps:
       - name: Setup PATH
-        run: echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
-
-      - name: Ensure RustRover is installed
         run: |
-          if [ ! -x "$RUSTROVER_HOME/MacOS/rustrover" ]; then
-            echo "RustRover not found at $RUSTROVER_HOME; installing via Homebrew cask"
-            brew install --cask rustrover
+          {
+            echo "$HOME/.orbstack/bin"
+            echo "/opt/homebrew/bin"
+            echo "/usr/local/bin"
+          } >> "$GITHUB_PATH"
+
+      - name: Locate the container socket
+        run: |
+          set -euo pipefail
+          # Resolved at runtime, not as a job-level env entry: $HOME is not in
+          # the `env` context.
+          #
+          # OrbStack's per-user socket first, then the system one. Checking both
+          # is what keeps this step honest against the label: `container-runtime`
+          # is platform-neutral by design, so a Linux box on plain Docker can
+          # earn it -- and would have died here on a hardcoded ~/.orbstack path
+          # that exists only on macOS. Not /var/run first, because OrbStack only
+          # symlinks that when nothing else has claimed it.
+          for sock in "$HOME/.orbstack/run/docker.sock" /var/run/docker.sock; do
+            if [ -S "$sock" ]; then
+              echo "DOCKER_HOST=unix://$sock" >> "$GITHUB_ENV"
+              echo "using container socket: $sock"
+              exit 0
+            fi
+          done
+          echo "::error::No container socket on $(hostname -s) (checked ~/.orbstack and /var/run). This runner advertises \`container-runtime\` without a live daemon; run the fleet-label reconcile to revoke it."
+          exit 1
+      # Fail loudly. The old workflow made every failure path non-fatal --
+      # continue-on-error, `|| echo`, and an `if:` that skipped the upload when
+      # no results existed -- so a scan that produced nothing still reported
+      # green. A missing token is a configuration bug, not a reason to no-op.
+      - name: Require Qodana Cloud token
+        run: |
+          if [ -z "${QODANA_TOKEN:-}" ]; then
+            echo "::error::QODANA_TOKEN is not set. Qodana for Rust needs a Cloud project token to verify the Ultimate license. Provision it with scripts/qodana_provision.py in maxi-config."
+            exit 1
           fi
-          test -x "$RUSTROVER_HOME/MacOS/rustrover"
-
-      - name: Cleanup stale RustRover
-        run: |
-          pkill -9 -f RustRover || true
-          pkill -9 -f rustrover || true
 
       - name: Generate org repo token
         id: app-token
@@ -65,81 +193,107 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           owner: maxi-tools
 
-      - name: Configure git for private deps
-        run: |
-          cat > /Users/maxi/.gitconfig-ci <<GITEOF
-          [credential]
-          helper =
-          [url "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/"]
-          insteadOf = "https://github.com/"
-          insteadOf = "git@github.com:"
-          GITEOF
-
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          token: ${{ steps.app-token.outputs.token }}
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # Qodana needs full history to diff a PR against its base.
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Authorize private crate fetches inside the container
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          # The linter runs in Docker and does not inherit the runner's git
+          # config, so the credentials have to travel with the checkout.
+          # qodana.yaml's `bootstrap` includes this file from the container's
+          # view of the workspace (/data/project).
+          mkdir -p .qodana
+          cat > .qodana/gitconfig <<'GITEOF'
+          [credential]
+          	helper =
+          GITEOF
+          {
+            printf '[url "https://x-access-token:%s@github.com/"]\n' "$APP_TOKEN"
+            printf '\tinsteadOf = https://github.com/\n'
+            printf '\tinsteadOf = git@github.com:\n'
+            printf '\tinsteadOf = ssh://git@github.com/\n'
+          } >> .qodana/gitconfig
+          chmod 600 .qodana/gitconfig
+          # Never let the credential file reach the analysis scope or a commit.
+          printf '.qodana/\n' >> .git/info/exclude
 
       - name: Qodana Scan
-        continue-on-error: true
+        id: scan
+        uses: JetBrains/qodana-action@4861e015da555e86a72b862892aba6c2b93e6891 # v2026.1.3
+        with:
+          # The linter and profile come from qodana.yaml so that one file is the
+          # source of truth for every repo, rather than being split across YAML
+          # here and YAML there.
+          # -e CARGO_HOME: the container runs as the RUNNER's uid (the CLI
+          # defaults to the current system user), which does not own the
+          # image's /usr/local/cargo. Without this, bootstrap's `cargo fetch`
+          # dies on "failed to create directory
+          # /usr/local/cargo/registry/cache: Permission denied" before a single
+          # file is analyzed. Pointing CARGO_HOME at the mounted cache dir keeps
+          # it writable AND persists it through the action's own cache, rather
+          # than re-downloading the index every run.
+          #
+          # Deliberately not `--user 0:0`. Root would also fix the write, and
+          # would leave root-owned files in a workspace that a non-ephemeral
+          # self-hosted runner reuses for the next job.
+          args: >-
+            --property=idea.headless.enable.statistics=false
+            -e CARGO_HOME=/data/cache/cargo
+          pr-mode: ${{ github.event_name == 'pull_request' }}
+          upload-result: true
+          use-caches: true
+          post-pr-comment: ${{ github.event_name == 'pull_request' }}
+          use-annotations: true
         env:
-          GIT_CONFIG_GLOBAL: /Users/maxi/.gitconfig-ci
-          CARGO_TARGET_DIR: ${{ runner.temp }}/qodana/target
-          CARGO_HOME: ${{ runner.temp }}/qodana/cargo
-        run: |
-          set -uo pipefail
-          RESULTS_DIR="$RUNNER_TEMP/qodana/results"
-          mkdir -p "$RESULTS_DIR"
-          run_inspect() {
-            "$RUSTROVER_HOME/MacOS/rustrover" inspect "$(pwd)" "$RESULTS_DIR" --qodana -v2 &
-            local pid=$!
-            ( sleep 540; kill -9 "$pid" 2>/dev/null ) &
-            local watcher=$!
-            local rc=0
-            wait "$pid" || rc=$?
-            kill "$watcher" 2>/dev/null || true
-            return $rc
-          }
-          if ! run_inspect; then
-            echo "::warning::rustrover inspect hung/failed; clearing RustRover caches and retrying cold"
-            pkill -9 -f rustrover || true
-            rm -rf "$HOME"/Library/Caches/JetBrains/RustRover*/caches || true
-            run_inspect || echo "::warning::qodana inspect failed again after cache reset (non-fatal)"
-          fi
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
 
-      - name: Check Qodana results
-        id: qodana_results
+      - name: Assert the scan produced a report
+        # Not a bare always(): if an earlier step failed the scan never ran,
+        # and asserting on its output reports a second, misleading failure
+        # about missing SARIF. Only meaningful once the scan attempted.
+        if: always() && steps.scan.outcome != 'skipped'
+        run: |
+          set -euo pipefail
+          sarif="$RUNNER_TEMP/qodana/results/qodana.sarif.json"
+          if [ ! -s "$sarif" ]; then
+            echo "::error::Qodana produced no SARIF at $sarif. This is the failure mode the RustRover-based workflow hid for months -- do not make it non-fatal again."
+            exit 1
+          fi
+          problems="$(python3 -c 'import json,sys; print(sum(len(r.get("results",[])) for r in json.load(open(sys.argv[1]))["runs"]))' "$sarif")"
+          {
+            echo "## Qodana"
+            echo "- Linter: \`$(python3 -c 'import yaml,sys; print(yaml.safe_load(open("qodana.yaml")).get("linter","<unset>"))' 2>/dev/null || echo unknown)\`"
+            echo "- Problems reported: $problems"
+            echo "- Report: uploaded to Qodana Cloud and to GitHub code scanning"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The action's own `upload-result` artifact turned out to contain only
+      # log/, no SARIF -- so a failing gate told you THAT there were problems
+      # with no way to see WHICH without opening Qodana Cloud. Upload the SARIF
+      # itself, so a red gate is diagnosable from the run alone.
+      - name: Upload SARIF artifact
+        if: always() && steps.scan.outcome != 'skipped'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: qodana-sarif
+          path: ${{ runner.temp }}/qodana/results/qodana.sarif.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Redact container credentials
         if: always()
-        run: |
-          RESULTS_DIR="$RUNNER_TEMP/qodana/results"
-          if [ -f "$RESULTS_DIR/result-allProblems.json" ] || [ -f "$RESULTS_DIR/results-allProblems.json" ]; then
-            echo "has_results=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_results=false" >> "$GITHUB_OUTPUT"
-          fi
-
-          if [ -f "$RESULTS_DIR/qodana.sarif.json" ]; then
-            echo "has_sarif=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_sarif=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Upload to Qodana Cloud
-        if: always() && steps.qodana_results.outputs.has_results == 'true' && env.QODANA_TOKEN != ''
-        run: |
-          if [ -z "${QODANA_TOKEN:-}" ]; then
-            echo "QODANA_TOKEN is not set; skipping cloud upload"
-            exit 0
-          fi
-          command -v qodana || brew install jetbrains/utils/qodana
-          qodana send \
-            --results-dir "$RUNNER_TEMP/qodana/results" \
-            --project-dir "$(pwd)" || echo "Cloud upload failed (non-fatal)"
+        run: rm -rf .qodana
 
       - name: Upload SARIF to GitHub
-        if: always() && steps.qodana_results.outputs.has_sarif == 'true'
+        if: always() && steps.scan.outcome != 'skipped'
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ${{ runner.temp }}/qodana/results
+          sarif_file: ${{ runner.temp }}/qodana/results/qodana.sarif.json
         continue-on-error: true
