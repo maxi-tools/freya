@@ -240,12 +240,19 @@ jobs:
           # it writable AND persists it through the action's own cache, rather
           # than re-downloading the index every run.
           #
+          # The Rust configuration timeout defaults low enough that a large
+          # workspace loses to it before analysis starts -- maxi-tools-archive
+          # died on "qd.rust.configuration.timeout.minutes timeout reached"
+          # while resolving cargo metadata. 20 minutes sits under the job's own
+          # 30-minute cap, so the job still bounds it.
+          #
           # Deliberately not `--user 0:0`. Root would also fix the write, and
           # would leave root-owned files in a workspace that a non-ephemeral
           # self-hosted runner reuses for the next job.
           args: >-
             --property=idea.headless.enable.statistics=false
             -e CARGO_HOME=/data/cache/cargo
+            --property=qd.rust.configuration.timeout.minutes=20
           pr-mode: ${{ github.event_name == 'pull_request' }}
           # `upload-result: false` on purpose. It uploads a full HTML report to
           # GitHub artifacts on every run, and Qodana Cloud already stores that
