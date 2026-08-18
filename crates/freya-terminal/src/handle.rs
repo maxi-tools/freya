@@ -159,30 +159,31 @@ impl TerminalHandle {
 
     /// Create a terminal handle from a daemon-provided PTY file descriptor.
     ///
-    /// The fd must be a valid, open PTY master. Ownership is transferred —
-    /// freya-terminal will close it when the handle is dropped.
-    ///
-    /// # Safety
-    /// The caller must ensure `fd` is a valid PTY master file descriptor.
+    /// Ownership is transferred mechanically by the [`OwnedFd`][std::os::unix::io::OwnedFd]
+    /// type: passing it by value means the caller can no longer use or close
+    /// it. freya-terminal will close it when the handle is dropped. The
+    /// daemon owns the child process; this path does not spawn or wait on a
+    /// child.
     ///
     /// # Example
     ///
     /// ```rust,no_run
     /// use freya_terminal::prelude::*;
-    /// use std::os::unix::io::RawFd;
+    /// use std::os::unix::io::{FromRawFd, OwnedFd, RawFd};
     ///
     /// let fd: RawFd = 42; // obtained from daemon
-    /// let handle = unsafe {
-    ///     TerminalHandle::from_fd(TerminalId::new(), fd, None).unwrap()
-    /// };
+    /// // SAFETY: `fd` is a valid, open pty master descriptor that the daemon
+    /// // handed over and no longer uses, so `OwnedFd` becomes its sole owner.
+    /// let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+    /// let handle = TerminalHandle::from_fd(TerminalId::new(), fd, None).unwrap();
     /// ```
     #[cfg(unix)]
-    pub unsafe fn from_fd(
+    pub fn from_fd(
         id: TerminalId,
-        fd: std::os::unix::io::RawFd,
+        fd: std::os::unix::io::OwnedFd,
         scrollback_length: Option<usize>,
     ) -> Result<Self, TerminalError> {
-        let master = unsafe { crate::fd_pty::RawFdMasterPty::from_fd(fd) };
+        let master = crate::fd_pty::RawFdMasterPty::from_owned_fd(fd);
         setup_terminal_from_master(id, Box::new(master), scrollback_length.unwrap_or(1000))
     }
 
