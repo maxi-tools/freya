@@ -53,10 +53,14 @@ jobs:
     #   further use.
     #
     # A zero-step failure on the REQUIRED check, for every repo, because of a
-    # spending cap unrelated to code. Any Mac can run this; it does not need the
-    # container-runtime or tier-fast boxes, so it will not queue behind scans.
+    # spending cap unrelated to code.
+    #
+    # Linux X64 rather than macOS: the fleet is moving to containerised
+    # execution, which is a Linux story, and it keeps the Macs free for the
+    # container scans. Deliberately NOT asking for container-runtime or
+    # tier-fast -- this is trivial work and must not queue behind a scan.
     if: github.event_name == 'pull_request' || github.event_name == 'push'
-    runs-on: [self-hosted, macOS]
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 5
     permissions:
       contents: read
