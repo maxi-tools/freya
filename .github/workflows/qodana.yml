@@ -294,6 +294,16 @@ jobs:
       # itself, so a red gate is diagnosable from the run alone.
       - name: Upload SARIF artifact
         if: always() && steps.scan.outcome != 'skipped'
+        # Non-blocking on purpose, and this is the one place it is right to be.
+        # Qodana Cloud is the system of record now -- per-project, with history.
+        # This artifact is a convenience for reading a red gate without opening
+        # Cloud. A full account-wide artifact quota is unrelated to code quality,
+        # and letting it red-line a scan that SUCCEEDED and published to Cloud
+        # reports a problem that does not exist. maxi-firmware-std and
+        # maxi-transport failed exactly that way.
+        #
+        # The scan itself and the report assertion above stay blocking.
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: qodana-sarif
