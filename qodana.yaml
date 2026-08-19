@@ -1,25 +1,96 @@
-version: '1.0'
+# Shared Qodana configuration for every maxi-tools and personal repo.
+# Source of truth: maxi-config/qodana-base.yaml
+#
+# Distributed by `just ci-audit-rollout`, which renders this per repo,
+# PRESERVING that repo's own `linter:`/`image:` line and any `include:` block.
+# Do not hand-edit a repo's qodana.yaml: the next rollout overwrites it. Before
+# this existed, every repo carried a hand-copied near-duplicate of this file and
+# they had already drifted -- maxi-core was missing two exclusions maxi-tui had,
+# and maxi-config itself was missing one both of them carried.
+#
+# Every exclusion below is justified by measurement, not taste. Baseline across
+# 57 repos on 2026-08-19: 4,132 findings.
+
+version: "1.0"
+
+linter: qodana-rust
+
 profile:
   name: qodana.recommended
+
+bootstrap: |
+  git config --global include.path /data/project/.qodana/gitconfig
+  cargo fetch --locked || cargo fetch
+
 exclude:
-- name: All
-  paths:
-  - target
-  - .git
-  - .maxi-worktrees
-  - .claude/worktrees
-  - .worktrees
-  - node_modules
-  - vendor
-  - '**/tests/**'
-  - '**/benches/**'
-  - '**/examples/**'
-- name: actions/missing-workflow-permissions
-- name: rust/cleartext-logging
-  paths:
-  - '**/daemon/**'
-  - '**/audit/**'
-  - '**/proficiency/**'
-  - '**/orchestrator.*'
-  - '**/session_parser.*'
-linter: qodana-rust
+  - name: All
+    paths:
+      - target
+      - .git
+      - .maxi-worktrees
+      - .claude/worktrees
+      - .worktrees
+      - node_modules
+      - vendor
+      - "**/tests/**"
+      - "**/benches/**"
+      - "**/examples/**"
+
+  # 787 findings across 15 repos -- the single largest category, and Qlty
+  # already reports duplication as a maintainability metric with history. Two
+  # tools reporting the same duplication means two PR comments and no extra
+  # information; Qodana is kept for the semantic inspections Qlty lacks.
+  - name: DuplicatedCode
+
+  # Style that another gate already owns, and owns more authoritatively.
+  #
+  # These repos gate on strict clippy at ZERO warnings before a push lands, so
+  # anything clippy accepts and Qodana rejects is a disagreement between two
+  # linters, not a defect -- and clippy is the one that blocks. 112 function
+  # naming + 68 argument naming + 91 PEP 8 findings, none of which survived
+  # clippy or ruff.
+  - name: RsFunctionNaming
+  - name: RsArgumentNaming
+  - name: RsSelfConvention
+  - name: PyPep8NamingInspection
+
+  # Ditto for pure-style refactorings clippy covers.
+  - name: RsLiftReturn
+  - name: RsRedundantElse
+
+  # False positive: diagnostic logging of session IDs, tier levels and
+  # credential NAMES -- never values.
+  - name: rust/cleartext-logging
+    paths:
+      - "**/daemon/**"
+      - "**/audit/**"
+      - "**/proficiency/**"
+      - "**/orchestrator.*"
+      - "**/session_parser.*"
+
+  # False positive: Argon2 KDF parameters and test fixture passwords.
+  - name: rust/hard-coded-cryptographic-value
+    paths:
+      - "**/tests/**"
+      - "**/crypto.rs"
+
+  # False positive: intentional RDMA raw pointer allocation via posix_memalign.
+  - name: rust/access-invalid-pointer
+    paths:
+      - "**/transport-rdma/**"
+
+  # False positive: status_page.html escapes all user values via escHtml() and
+  # is served locally.
+  - name: js/xss
+    paths:
+      - "**/status_page.html"
+
+  # False positive: puppeteer_server returns static error strings, no traces.
+  - name: js/stack-trace-exposure
+    paths:
+      - "**/puppeteer_server.js"
+
+  # Workflow permissions are audited by the fleet-label and review-gate lanes,
+  # and `permissions: {}` at workflow level with per-job grants reads as
+  # "missing" to this inspection.
+  - name: actions/missing-workflow-permissions
