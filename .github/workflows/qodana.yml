@@ -44,8 +44,19 @@ env:
 jobs:
   qodana:
     # Keep the required PR check cheap. The real scan is in qodana-full.
+    #
+    # Self-hosted, not ubuntu-latest. This job is a checkout plus a shell gate --
+    # seconds of work -- but on hosted runners it consumes billed minutes, and
+    # the org hit its Actions budget mid-rollout:
+    #
+    #   The job was not started because an Actions budget is preventing
+    #   further use.
+    #
+    # A zero-step failure on the REQUIRED check, for every repo, because of a
+    # spending cap unrelated to code. Any Mac can run this; it does not need the
+    # container-runtime or tier-fast boxes, so it will not queue behind scans.
     if: github.event_name == 'pull_request' || github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS]
     timeout-minutes: 5
     permissions:
       contents: read
