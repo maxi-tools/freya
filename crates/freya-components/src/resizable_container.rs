@@ -2,11 +2,18 @@ use freya_core::prelude::*;
 use thiserror::Error;
 use torin::{
     content::Content,
-    prelude::{Area, Direction, Length},
+    prelude::{
+        Area,
+        Direction,
+        Length,
+    },
     size::Size,
 };
 
-use crate::{define_theme, get_theme};
+use crate::{
+    define_theme,
+    get_theme,
+};
 
 define_theme! {
     %[component]

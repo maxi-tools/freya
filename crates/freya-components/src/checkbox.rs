@@ -2,7 +2,11 @@ use freya_animation::prelude::*;
 use freya_core::prelude::*;
 use torin::prelude::*;
 
-use crate::{define_theme, get_theme, icons::tick::TickIcon};
+use crate::{
+    define_theme,
+    get_theme,
+    icons::tick::TickIcon,
+};
 
 define_theme! {
     %[component]

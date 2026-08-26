@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use freya_components::{
     button::{
-        Button, ButtonLayoutThemePartialExt, ButtonLayoutThemePreference, ButtonLayoutVariant,
+        Button,
+        ButtonLayoutThemePartialExt,
+        ButtonLayoutThemePreference,
+        ButtonLayoutVariant,
     },
     get_theme,
 };

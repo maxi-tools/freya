@@ -1,6 +1,11 @@
 use freya_core::prelude::*;
 use torin::{
-    prelude::{Area, CursorPoint, Position, Size2D},
+    prelude::{
+        Area,
+        CursorPoint,
+        Position,
+        Size2D,
+    },
     size::Size,
 };
 

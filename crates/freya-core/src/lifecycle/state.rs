@@ -1,17 +1,27 @@
 use std::{
     cell::RefCell,
-    fmt::{Debug, Display},
+    fmt::{
+        Debug,
+        Display,
+    },
     mem::MaybeUninit,
     ops::Deref,
     rc::Rc,
 };
 
-use generational_box::{AnyStorage, GenerationalBox, UnsyncStorage};
+use generational_box::{
+    AnyStorage,
+    GenerationalBox,
+    UnsyncStorage,
+};
 use rustc_hash::FxHashSet;
 
 use crate::{
-    current_context::CurrentContext, lifecycle::writable_utils::WritableUtils, prelude::use_hook,
-    reactive_context::ReactiveContext, scope_id::ScopeId,
+    current_context::CurrentContext,
+    lifecycle::writable_utils::WritableUtils,
+    prelude::use_hook,
+    reactive_context::ReactiveContext,
+    scope_id::ScopeId,
 };
 
 /// A reactive state container that holds a value of type `T` and manages subscriptions to changes.

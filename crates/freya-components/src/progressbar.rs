@@ -1,12 +1,21 @@
 use freya_animation::{
     easing::Function,
-    hook::{Ease, use_animation_transition},
+    hook::{
+        Ease,
+        use_animation_transition,
+    },
     prelude::AnimNum,
 };
 use freya_core::prelude::*;
-use torin::{prelude::Alignment, size::Size};
+use torin::{
+    prelude::Alignment,
+    size::Size,
+};
 
-use crate::{define_theme, get_theme};
+use crate::{
+    define_theme,
+    get_theme,
+};
 
 define_theme! {
     %[component]

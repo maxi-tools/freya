@@ -41,22 +41,55 @@ use std::{
     io::Write,
     path::PathBuf,
     rc::Rc,
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
-use freya_clipboard::copypasta::{ClipboardContext, ClipboardProvider};
-use freya_components::{cache::AssetCacher, integration::integration};
-use freya_core::{integration::*, prelude::*};
-use freya_engine::prelude::{
-    EncodedImageFormat, FontCollection, FontMgr, SkData, TypefaceFontProvider, raster_n32_premul,
+use freya_clipboard::copypasta::{
+    ClipboardContext,
+    ClipboardProvider,
 };
-use ragnarok::{CursorPoint, EventsExecutorRunner, EventsMeasurerRunner, NodesState};
-use torin::prelude::{LayoutNode, Size2D};
+use freya_components::{
+    cache::AssetCacher,
+    integration::integration,
+};
+use freya_core::{
+    integration::*,
+    prelude::*,
+};
+use freya_engine::prelude::{
+    EncodedImageFormat,
+    FontCollection,
+    FontMgr,
+    SkData,
+    TypefaceFontProvider,
+    raster_n32_premul,
+};
+use ragnarok::{
+    CursorPoint,
+    EventsExecutorRunner,
+    EventsMeasurerRunner,
+    NodesState,
+};
+use torin::prelude::{
+    LayoutNode,
+    Size2D,
+};
 
 pub mod prelude {
-    pub use freya_core::{events::platform::*, prelude::*};
+    pub use freya_core::{
+        events::platform::*,
+        prelude::*,
+    };
 
-    pub use crate::{DocRunner, TestingRunner, launch_doc, launch_test};
+    pub use crate::{
+        DocRunner,
+        TestingRunner,
+        launch_doc,
+        launch_test,
+    };
 }
 
 type DocRunnerHook = Box<dyn FnOnce(&mut TestingRunner)>;

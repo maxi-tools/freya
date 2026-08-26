@@ -2,12 +2,18 @@ use std::rc::Rc;
 
 use rustc_hash::FxHashMap;
 use torin::{
-    prelude::{Direction, TreeAdapter},
+    prelude::{
+        Direction,
+        TreeAdapter,
+    },
     scaled::Scaled,
     size::Size,
 };
 
-use crate::{element::ElementExt, node_id::NodeId};
+use crate::{
+    element::ElementExt,
+    node_id::NodeId,
+};
 
 pub struct TreeAdapterFreya<'a> {
     pub elements: &'a FxHashMap<NodeId, Rc<dyn ElementExt>>,

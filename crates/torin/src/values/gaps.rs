@@ -1,6 +1,9 @@
 pub use euclid::Rect;
 
-use crate::{geometry::Length, scaled::Scaled};
+use crate::{
+    geometry::Length,
+    scaled::Scaled,
+};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(PartialEq, Clone, Debug, Default, Copy)]

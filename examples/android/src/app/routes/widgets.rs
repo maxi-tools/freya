@@ -1,7 +1,15 @@
-use std::{collections::HashSet, fmt};
+use std::{
+    collections::HashSet,
+    fmt,
+};
 
 use freya::{
-    material_design::{ButtonRippleExt, MenuItemRippleExt, Ripple, TileRippleExt},
+    material_design::{
+        ButtonRippleExt,
+        MenuItemRippleExt,
+        Ripple,
+        TileRippleExt,
+    },
     prelude::*,
 };
 

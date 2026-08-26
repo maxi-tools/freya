@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use freya_components::{
     get_theme,
-    sidebar::{SideBarItem, SideBarItemThemePreference},
+    sidebar::{
+        SideBarItem,
+        SideBarItemThemePreference,
+    },
 };
 use freya_core::prelude::*;
 use torin::size::Size;

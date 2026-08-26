@@ -1,10 +1,16 @@
-use std::time::{Duration, Instant};
+use std::time::{
+    Duration,
+    Instant,
+};
 
 use torin::prelude::CursorPoint;
 
 use crate::{
     integration::ScopeId,
-    prelude::{State, *},
+    prelude::{
+        State,
+        *,
+    },
 };
 
 #[derive(Clone, Copy, PartialEq)]

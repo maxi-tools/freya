@@ -6,7 +6,11 @@ use freya_devtools::NodeInfo;
 use freya_radio::prelude::use_radio;
 use freya_router::prelude::RouterContext;
 
-use crate::{Route, node::NodeElement, state::DevtoolsChannel};
+use crate::{
+    Route,
+    node::NodeElement,
+    state::DevtoolsChannel,
+};
 
 #[derive(Clone, PartialEq)]
 struct NodeTreeItem {

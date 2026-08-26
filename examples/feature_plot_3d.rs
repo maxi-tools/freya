@@ -7,9 +7,22 @@ use freya::{
         PlotSkiaBackend,
         plotters::{
             chart::ChartBuilder,
-            prelude::{IntoDrawingArea, IntoLinspace, PathElement, Rectangle},
-            series::{LineSeries, SurfaceSeries},
-            style::{BLACK, BLUE, Color, WHITE},
+            prelude::{
+                IntoDrawingArea,
+                IntoLinspace,
+                PathElement,
+                Rectangle,
+            },
+            series::{
+                LineSeries,
+                SurfaceSeries,
+            },
+            style::{
+                BLACK,
+                BLUE,
+                Color,
+                WHITE,
+            },
         },
     },
     prelude::*,

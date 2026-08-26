@@ -2,13 +2,20 @@ use std::{
     any::Any,
     cell::RefCell,
     collections::HashMap,
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::{
+        DefaultHasher,
+        Hash,
+        Hasher,
+    },
     rc::Rc,
     time::Duration,
 };
 
 use async_io::Timer;
-use freya_core::{integration::FxHashSet, prelude::*};
+use freya_core::{
+    integration::FxHashSet,
+    prelude::*,
+};
 
 /// Defines the duration for which an Asset will remain cached after it's user has stopped using it.
 /// The default is 1h (3600s).

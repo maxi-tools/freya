@@ -3,7 +3,10 @@
     windows_subsystem = "windows"
 )]
 use freya::prelude::*;
-use skia_safe::{Paint, PaintStyle};
+use skia_safe::{
+    Paint,
+    PaintStyle,
+};
 
 fn main() {
     launch(LaunchConfig::new().with_window(WindowConfig::new(app)))

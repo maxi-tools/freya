@@ -1,4 +1,7 @@
-use std::{mem, ops::BitOrAssign};
+use std::{
+    mem,
+    ops::BitOrAssign,
+};
 
 use freya_core::prelude::NavigationMode;
 

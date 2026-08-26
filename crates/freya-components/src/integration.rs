@@ -1,7 +1,14 @@
-use freya_core::{integration::AppComponent, layers::Layer, prelude::*};
+use freya_core::{
+    integration::AppComponent,
+    layers::Layer,
+    prelude::*,
+};
 use torin::prelude::Position;
 
-use crate::context_menu::{ContextMenu, ContextMenuCloseRequest};
+use crate::context_menu::{
+    ContextMenu,
+    ContextMenuCloseRequest,
+};
 
 pub fn integration(app: AppComponent) -> impl IntoElement {
     let platform = use_hook(Platform::get);

@@ -1,6 +1,13 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+};
 
-use fluent::{FluentArgs, FluentBundle, FluentResource};
+use fluent::{
+    FluentArgs,
+    FluentBundle,
+    FluentResource,
+};
 use freya_core::prelude::*;
 use unic_langid::LanguageIdentifier;
 

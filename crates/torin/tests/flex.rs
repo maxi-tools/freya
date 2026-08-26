@@ -1,7 +1,13 @@
-use std::{any::Any, rc::Rc};
+use std::{
+    any::Any,
+    rc::Rc,
+};
 
 use euclid::Length;
-use torin::{prelude::*, test_utils::*};
+use torin::{
+    prelude::*,
+    test_utils::*,
+};
 
 #[test]
 pub fn flex_generic() {

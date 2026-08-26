@@ -5,10 +5,20 @@ use ropey::Rope;
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 use tree_sitter::{
-    InputEdit, Language, Parser, Point, Query, QueryCursor, StreamingIterator, Tree,
+    InputEdit,
+    Language,
+    Parser,
+    Point,
+    Query,
+    QueryCursor,
+    StreamingIterator,
+    Tree,
 };
 
-use crate::{editor_theme::SyntaxTheme, languages::LanguageId};
+use crate::{
+    editor_theme::SyntaxTheme,
+    languages::LanguageId,
+};
 
 #[allow(dead_code)]
 fn capture_color(name: &str, theme: &SyntaxTheme) -> Color {

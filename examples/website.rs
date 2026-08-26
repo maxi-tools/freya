@@ -3,7 +3,11 @@
     windows_subsystem = "windows"
 )]
 
-use freya::{code_editor::*, prelude::*, text_edit::Rope};
+use freya::{
+    code_editor::*,
+    prelude::*,
+    text_edit::Rope,
+};
 
 fn main() {
     launch(
