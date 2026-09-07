@@ -826,11 +826,24 @@ jobs:
           fi
           qd_root="$RUNNER_TEMP/qodana"
           [ -d "$qd_root" ] || { echo "no Qodana working area yet"; exit 0; }
-          # Space-delimited, matched whole-word by the `case` below. Reused
-          # across runs on purpose, and therefore guarded for completeness
-          # rather than cleared: `caches` holds the JBR runtime, RUSTUP_HOME
-          # and CARGO_HOME, and a cold one costs a full re-download plus a
-          # cold `cargo fetch` on every scan.
+          # Space-delimited, matched whole-word by the `case` below. `caches`
+          # is Qodana's own /data/cache mount -- the JBR runtime, the CLI's
+          # config-loader jar, CARGO_HOME -- and it is kept because the scan
+          # WRITES INTO IT WHILE IT RUNS, not because it survives between runs.
+          #
+          # IT DOES NOT SURVIVE, and this comment used to say it did. The
+          # Actions runner empties $RUNNER_TEMP at the start of every job, so
+          # this step prints "no Qodana working area yet" and the JBR guard
+          # below prints "no JBR cache yet" on every run measured -- maxi-core
+          # 34162181508 (ml-node-3), 34161752539 (maxibaobab-4), 34076840441
+          # (maxicoconut-3). Nothing under here is warm.
+          #
+          # That false premise is what maxi-config#557 cost: RUSTUP_HOME was
+          # pointed into this tree to "warm" it, and instead handed rustup an
+          # empty home in place of the complete one the image ships. Do not
+          # move a tool's HOME here on the strength of the word "cache"; the
+          # guards below exist for boxes where the tree DOES persist, and a
+          # guard is not the same as a warm cache.
           keep="caches"
           swept=0
           for entry in "$qd_root"/* "$qd_root"/.[!.]*; do
@@ -900,82 +913,6 @@ jobs:
           done
           echo "incomplete JBR cache entries dropped: $dropped"
 
-      # SAME BUG, DIFFERENT CACHE -- and the third instance of one pattern
-      # across two repos. rustup decides a toolchain is installed by finding
-      # $RUSTUP_HOME/toolchains/<name>, and installs nothing further once that
-      # directory is there. The scan below points RUSTUP_HOME at
-      # /data/cache/rustup, which is this same persistent $RUNNER_TEMP tree, so
-      # a toolchain directory that exists WITHOUT its binaries makes every
-      # cargo call in qodana.yaml's `bootstrap` die with
-      #
-      #     error: 'cargo' is not installed for the toolchain
-      #     '1.98.0-x86_64-unknown-linux-gnu'
-      #
-      # Measured on maxibaobab-2 (maxi-config#547), dispatch 33928354045: the
-      # SAME commit succeeded twice on sibling boxes and failed there. So the
-      # lane's health depended on runner assignment, and a re-run "fixed" it by
-      # landing somewhere else -- while every future scan routed to that box
-      # stayed broken. That is the JBR shape above (#503), and it is the
-      # $RUNNER_TEMP venv shape in maxi-core#3891, where maxibaobab-1 passed a
-      # step at 12:23 and failed it at 12:48 from a half-cleaned venv whose
-      # bin/python existed while site-packages/pip did not.
-      #
-      # THE PRINCIPLE, written down because three instances is a pattern and
-      # not a coincidence: on a persistent runner, the presence of a cache
-      # directory is not evidence that the cache is complete. Any tool that
-      # infers "installed" from a path existing needs its own completeness
-      # check standing next to it.
-      #
-      # Dropping a broken toolchain costs one re-download; keeping it costs
-      # every future scan routed to that box.
-      - name: Drop an incomplete rustup cache
-        if: steps.relevant.outputs.scan == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          # This step ends in `rm -rf`, so validate the external input to the
-          # path BEFORE composing it -- the discipline maxi-core's
-          # ensure-pyyaml applies to its caller-supplied venv name. Nothing
-          # here is caller-supplied: the toolchain names come from globbing
-          # directories that already exist, and $RUNNER_TEMP is the runner's
-          # own. But `set -u` does not catch set-but-empty, and an empty value
-          # would aim the deletion at /qodana/... instead. Refuse, don't guess.
-          if [ -z "${RUNNER_TEMP:-}" ]; then
-            echo "::error::RUNNER_TEMP is unset or empty; refusing to guess where the rustup cache is"
-            exit 1
-          fi
-          rustup_root="$RUNNER_TEMP/qodana/caches/rustup"
-          [ -d "$rustup_root/toolchains" ] || { echo "no rustup toolchain cache yet"; exit 0; }
-          dropped=0
-          for d in "$rustup_root"/toolchains/*/; do
-            [ -d "$d" ] || continue
-            # Probe and test SEPARATELY, for the same reason as the JBR guard
-            # above: a directory this step cannot search is UNKNOWN, not
-            # incomplete, and the branch below deletes -- so unknown has to
-            # leave the cache alone rather than wipe a good one every run.
-            if [ ! -r "$d" ] || [ ! -x "$d" ]; then
-              echo "::warning::could not inspect $d; leaving it in place"
-              continue
-            fi
-            # cargo and rustc specifically, because those are what the
-            # bootstrap and the Rust analyzer invoke. A toolchain missing
-            # either is unusable no matter what else survived beside it.
-            missing=
-            for tool in cargo rustc; do
-              [ -x "$d/bin/$tool" ] || missing="$missing $tool"
-            done
-            if [ -n "$missing" ]; then
-              echo "::warning::dropping incomplete rustup toolchain on $(hostname -s): $d (missing:$missing)"
-              rm -rf "$d"
-              # A toolchain's update-hash lives OUTSIDE its directory and names
-              # it. Leaving one behind would be a second stale claim that a
-              # toolchain which no longer exists is already current.
-              rm -f "$rustup_root/update-hashes/$(basename "$d")"
-              dropped=$((dropped + 1))
-            fi
-          done
-          echo "incomplete rustup toolchains dropped: $dropped"
-
       - name: Qodana Scan
         id: scan
         if: steps.relevant.outputs.scan == 'true'
@@ -985,9 +922,109 @@ jobs:
           mkdir -p "$RUNNER_TEMP/qodana/results" "$RUNNER_TEMP/qodana/caches"
 
           qodana_args=(--property=idea.headless.enable.statistics=false)
+
+          # THE CONTAINER'S RUST ENVIRONMENT, and the whole of maxi-config#557.
+          #
+          # CARGO_HOME has to be a path the container user can WRITE. The
+          # image's own /usr/local/cargo is root-owned and this lane runs the
+          # image as the runner's uid, so without this line the bootstrap's
+          # `cargo fetch` dies on "failed to create directory
+          # /usr/local/cargo/registry/...: Permission denied". /data/cache is
+          # per-job scratch, not a warm cache (see the sweep step above), so a
+          # cold fetch on every scan is the price and it is a cheap one.
+          #
+          # RUSTUP_HOME IS DELIBERATELY NOT SET. It used to be
+          # /data/cache/rustup, on the theory that $RUNNER_TEMP is reused
+          # between runs. It is not: the runner empties it every job, so the
+          # override did not warm a cache, it SHADOWED the complete rustup home
+          # the image ships at /usr/local/rustup -- Rust 1.94.0 with rust-src,
+          # installed by `rustup-init --default-toolchain` -- with an empty
+          # directory holding no toolchains and no default. Every cargo call
+          # then died with
+          #
+          #     error: rustup could not choose a version of cargo to run,
+          #     because one wasn't specified explicitly, and no default is
+          #     configured.
+          #
+          # and the scan reported `Analysis scope: 0 packages across 1 Cargo
+          # projects` while still publishing a report and a green check: 61
+          # findings on maxi-core, 46 of them in Cargo.toml and 45 of those
+          # TomlUnresolvedReference -- the analyser reporting its own failure to
+          # resolve as if it were the repository's code. 55 of the 62 repos on
+          # the qodana-rust image carry no rust-toolchain.toml, so all 55 were
+          # scanning nothing and reporting it as a clean bill of health.
+          #
+          # This also retires #547/#548's "Drop an incomplete rustup cache"
+          # step. That guard was written for a toolchain directory that exists
+          # without its binaries; it exits early on `[ -d toolchains ]`, and an
+          # emptied $RUNNER_TEMP has no such directory, so it printed "no
+          # rustup toolchain cache yet" on every run of the failure it stood
+          # next to. With the toolchain back in the image there is no cache
+          # directory left to be half-populated, so the guard is deleted rather
+          # than left printing reassurance about a path this lane no longer
+          # creates.
+          docker_env=(--env CARGO_HOME=/data/cache/cargo)
+
           if [[ "$QODANA_IMAGE" == jetbrains/qodana-rust:* ]] \
             || [[ "$QODANA_IMAGE" == jetbrains/qodana-rust@* ]]; then
             qodana_args+=(--property=qd.rust.configuration.timeout.minutes=20)
+
+            # PIN THE ANALYSIS TO THE TOOLCHAIN THE IMAGE ALREADY HAS, because
+            # reading /usr/local/rustup is safe and writing to it is not.
+            #
+            # It is root-owned 0755 and ships exactly one toolchain. A repo
+            # with a rust-toolchain.toml naming a different channel turns
+            # reading that directory into installing into it, and the scan dies
+            # on
+            #
+            #     error: could not create temp file /usr/local/rustup/tmp/...:
+            #     Permission denied (os error 13)
+            #
+            # before a file is analysed -- observed in maxi-tools/waterui run
+            # 33529368644, 45s after its pin landed. That failure is why
+            # RUSTUP_HOME was moved to the mount in the first place, so simply
+            # dropping the override would trade 55 broken repos for the 7
+            # pinned ones (maxi-config, maxi-ml, maxi-kvm, maxi-mux, freya,
+            # waterui, maxi-warp-spike).
+            #
+            # RUSTUP_TOOLCHAIN outranks rust-toolchain.toml, so nothing asks
+            # rustup to install anything and the read-only home is enough. The
+            # org pin exists so clippy's LINT SET matches between workstation
+            # and CI (rust-toolchain.toml says so in its header); Qodana runs
+            # its own inspections, not clippy, and needs only a cargo that can
+            # resolve the graph. The image's toolchain is also the one carrying
+            # rust-src, which is what the Rust plugin resolves std against -- a
+            # rustup-installed pin under `profile = "minimal"` would not have
+            # it.
+            #
+            # Read out of the image rather than hardcoded, so an image bump
+            # cannot leave this pointing at a toolchain that is no longer
+            # there, and an image that ships none fails HERE, loudly, instead
+            # of producing another zero-package report.
+            #
+            # The probe RUNS CARGO under the name it is about to export, rather
+            # than trusting the name it parsed. Both halves of #557 were a
+            # rustup that resolved to nothing while everything around it looked
+            # healthy, so the only probe worth having is the one that answers
+            # the actual question -- does `cargo` run? -- and it costs one
+            # container start against an image that is already local.
+            #
+            # `|| image_toolchain=` so a probe that cannot run at all reaches
+            # the error below instead of aborting the step under `set -e` with
+            # docker's exit code and no explanation of what it was for.
+            image_toolchain="$(docker run --rm --entrypoint /bin/sh "$QODANA_IMAGE" -c '
+              set -e
+              t=$(rustup show active-toolchain | head -n 1 | cut -d " " -f 1)
+              test -n "$t"
+              RUSTUP_TOOLCHAIN=$t cargo --version >/dev/null
+              printf %s "$t"
+            ')" || image_toolchain=
+            if [ -z "$image_toolchain" ]; then
+              echo "::error::$QODANA_IMAGE has no usable default rustup toolchain, so cargo cannot run and the scan would resolve 0 packages -- see maxi-config#557"
+              exit 1
+            fi
+            echo "rust toolchain: $image_toolchain (from the image, read-only)"
+            docker_env+=(--env "RUSTUP_TOOLCHAIN=$image_toolchain")
           fi
 
           # The committed baseline, when this repo carries one. qodana-base.yaml
@@ -1091,6 +1128,14 @@ jobs:
           # the macOS OrbStack fleet even though the identical direct bind mount
           # above contained Cargo.toml. Use the image's supported Docker
           # interface directly so every path is explicit and testable.
+          #
+          # `tee` because the assertion after this step has to be able to read
+          # what the analyser SAID, not only what it wrote: `Analysis scope: 0
+          # packages` and the bootstrap's own fetch-failed marker are the only
+          # evidence that a report describes nothing, and both are lines in
+          # this output. `set -o pipefail` is already in force, so the pipe
+          # does not swallow a failing scan. 2>&1 because rustup and cargo
+          # write their failures to stderr.
           docker run --rm \
             --name "$QODANA_CLI_CONTAINER_NAME" \
             --user "$(id -u):$(id -g)" \
@@ -1102,10 +1147,9 @@ jobs:
             --env QODANA_BRANCH \
             --env QODANA_REVISION \
             --env QODANA_JOB_URL \
-            --env CARGO_HOME=/data/cache/cargo \
-            --env RUSTUP_HOME=/data/cache/rustup \
+            "${docker_env[@]}" \
             "$QODANA_IMAGE" \
-            "${qodana_args[@]}"
+            "${qodana_args[@]}" 2>&1 | tee "$RUNNER_TEMP/qodana/scan.log"
 
       # THE ONE FAILURE MODE THIS LANE COULD NOT EXPLAIN. When the scan dies
       # before writing SARIF, `qodana scan` prints
@@ -1413,6 +1457,35 @@ jobs:
             echo "- Problems reported: $problems"
             echo "- Report: uploaded to Qodana Cloud and to GitHub code scanning"
           } >> "$GITHUB_STEP_SUMMARY"
+
+          # AND THE ANALYSER ACTUALLY SAW THE PROJECT. Everything above proves
+          # the report EXISTS, belongs to this commit, and will be accepted by
+          # code scanning. None of it can tell an empty analysis from a clean
+          # one, and maxi-config#557 was exactly that: a scan whose dependency
+          # graph never resolved, publishing 61 findings -- 45 of them
+          # TomlUnresolvedReference, i.e. the failure itself -- under a green
+          # check, for weeks, with the only evidence two lines in the middle of
+          # the scan log.
+          #
+          # So read those two lines. Both are Rust-specific and neither appears
+          # in a healthy run, so no linter needs to be special-cased here: the
+          # greps simply find nothing in a JS, Python, Go or .NET scan.
+          #
+          # This is deliberately FATAL. A scan that could not resolve is a
+          # broken measurement, and this lane's entire premise -- #526, #544,
+          # #549 and now #557 -- is that a silently empty result is worse than
+          # a red one, because a red one gets fixed.
+          scan_log="$RUNNER_TEMP/qodana/scan.log"
+          if [ -s "$scan_log" ]; then
+            if grep -q 'QODANA_BOOTSTRAP: cargo fetch failed' "$scan_log"; then
+              echo "::error::the Rust bootstrap could not fetch dependencies, so the unresolved references in this report are the scan failing, not the code. See maxi-config#557."
+              exit 1
+            fi
+            if grep -qE 'Analysis scope: 0 packages' "$scan_log"; then
+              echo "::error::Qodana resolved 0 packages: this report measures nothing, whatever its finding count says. See maxi-config#557."
+              exit 1
+            fi
+          fi
 
       # The action's own `upload-result` artifact turned out to contain only
       # log/, no SARIF -- so a failing gate told you THAT there were problems
