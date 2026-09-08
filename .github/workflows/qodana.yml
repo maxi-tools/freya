@@ -244,6 +244,17 @@ jobs:
     # A PR that genuinely wants one says so with the `run-qodana` label, and the
     # schedule keeps whole-repo coverage honest. Nothing about fork safety
     # changes -- that is the outer conjunct above, and it stays.
+    #
+    # THE DISPATCH CONJUNCT is the third one, and it is not a fork question.
+    # `github.event_name == 'workflow_dispatch'` sits in the economy
+    # disjunction below as an unconditional admission, and the fork conjunct
+    # above short-circuits on any non-pull_request event -- so a dispatch
+    # cleared both. `gh workflow run --ref` accepts ANY branch, so that was a
+    # route for anyone with write access to run their own branch's qodana.yaml
+    # `bootstrap` -- which is `cargo fetch` over a tree they chose -- inside
+    # this container, next to the org-wide App token this job mints. Pinned to
+    # the owner by numeric id (ci/review-trusted-actors.toml pins 874012);
+    # `schedule` and `push` are untouched.
     if: >
       (
         github.event_name != 'pull_request' ||
@@ -251,6 +262,10 @@ jobs:
           github.event.pull_request.head.repo.full_name == github.repository &&
           github.event.pull_request.user.login != 'dependabot[bot]'
         )
+      ) &&
+      (
+        github.event_name != 'workflow_dispatch' ||
+        github.event.sender.id == 874012
       ) &&
       (
         github.event_name == 'schedule' ||
@@ -330,7 +345,35 @@ jobs:
     # Malformed JSON here fails the job loudly at parse time. That is intended:
     # a silently-ignored override would route the scan to the default pool
     # while the operator believed otherwise.
-    runs-on: ${{ fromJSON(vars.QODANA_RUNS_ON || '["self-hosted","Linux","X64","container-runtime","disk-large"]') }}
+    #
+    # WHO WROTE THE TREE decides the runner, and it decides it HERE rather than
+    # in the `if:` above. The `if:` keeps forks and Dependabot out, which is a
+    # fork test, not an authorship test: a same-repository pull request is
+    # authored by anyone with write access, and `opened` / `reopened` /
+    # `ready_for_review` / `labeled` carry no provenance for the revision at
+    # all -- they fire on a tree somebody else pushed. This job checks out
+    # `pull_request.head.sha` and runs qodana.yaml's bootstrap, i.e. `cargo
+    # fetch` over a Cargo.toml from that tree, as the runner user on a
+    # persistent box, beside the App token minted above. Only an owner-sent
+    # `synchronize` says who pushed the bytes being analysed.
+    #
+    # In `runs-on` for the #345/#346 reason: those were not missing same-repo
+    # tests, they were same-repo tests one level too deep to reach. A condition
+    # that SELECTS the runner cannot fail that way -- if it is ever wrong the
+    # scan lands on a hosted VM instead of losing the guard. Same construct as
+    # maxi-core#3913, maxi-ui#282 and workflows/standard-rust-ci.yml's `rust`.
+    #
+    # Non-pull_request events are unaffected and keep the fleet: `schedule` is
+    # post-merge, `push` is post-merge, and `workflow_dispatch` is pinned to
+    # the owner by the third conjunct of the `if:` above.
+    #
+    # COST: a `run-qodana` pull request from anyone else, or on any action
+    # other than `synchronize`, now runs hosted. While the org's Actions
+    # allowance is exhausted that means the scan is refused before a runner is
+    # assigned rather than skipped quietly -- a worse-looking outcome for an
+    # opt-in advisory lane, and still the right trade against org credentials
+    # on a persistent runner.
+    runs-on: ${{ (github.event_name != 'pull_request' || (github.event.sender.id == 874012 && github.event.action == 'synchronize' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON(vars.QODANA_RUNS_ON || '["self-hosted","Linux","X64","container-runtime","disk-large"]') || 'ubuntu-latest' }}
     # 30 minutes, and that budget now buys analysis instead of a cache
     # round-trip. maxi-core#3862 read a cancelled run as the Qodana Cloud
     # publish overrunning the wall. The log says otherwise: on maxi-core run
@@ -545,6 +588,39 @@ jobs:
             exit 1
           fi
 
+      # `permission-contents: read` is the whole of what this token is for: the
+      # gitconfig written below rewrites https/ssh GitHub URLs so `cargo fetch`
+      # can read private crate sources. Nothing here writes anything.
+      #
+      # It was ABSENT, and absent is not "the default is read". A mint with no
+      # `permission-*` input carries the App installation's FULL permission
+      # set, and this installation is repository_selection=all over 73 repos
+      # (60 private) with contents:write, workflows:write, actions:write and
+      # organization_self_hosted_runners:write. So the unscoped mint put an
+      # org-wide WRITE credential -- including the ability to rewrite workflows
+      # and manage these runners -- into a job that executes qodana.yaml's
+      # bootstrap on a persistent box. Naming the permission is subtractive:
+      # the minted token carries exactly the `permission-*` inputs given, so a
+      # granted-but-unrequested permission becomes an absent one (verified on
+      # maxi-config#559).
+      #
+      # NO `repositories:` list, deliberately. This file is copied
+      # byte-for-byte into every consumer repo and each has a different private
+      # dependency set; a list derived from one repo's Cargo.lock would leave
+      # the others fetching without credentials, which this workflow reports as
+      # "expect unresolved references" -- a green scan that covered less
+      # (maxi-config#557). Narrowing the REACH needs the per-repo rendering
+      # this template deliberately does not have; narrowing the POWER does not,
+      # so that is done here and the rest is recorded.
+      #
+      # BETTER ANSWER, NOT TAKEN HERE: workflows/qodana-personal.yml already
+      # implements maxi-config#566's pattern -- pre-fetch the dependencies in a
+      # throwaway container with the credential mounted read-only from
+      # RUNNER_TEMP, then run the scan against the populated cache with NO
+      # credential in it at all. That removes the token from the step that
+      # executes repository-supplied bootstrap code, rather than shrinking it.
+      # Porting it means restructuring the scan's cache volumes in a 48 KB
+      # template that fans out byte-identically, so it is its own change.
       - name: Generate org repo token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -552,6 +628,7 @@ jobs:
           client-id: ${{ secrets.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           owner: maxi-tools
+          permission-contents: read
 
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
