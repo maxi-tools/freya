@@ -173,7 +173,15 @@ jobs:
           github_step_summary "- Full Qodana scan: runs for schedule/manual, strict mode, or same-repo PRs labeled \`run-qodana\`."
           github_step_summary ""
           github_step_summary "## Workflow lane summary"
-          github_step_summary "- merge-gate: qodana sentinel ran on WarpBuild"
+          # DERIVED, not asserted. This line read "ran on WarpBuild" from the
+          # pilot until 2026-09-08, long after the job moved to
+          # `[self-hosted, Linux, X64]` -- and unlike a stale comment it is
+          # OUTPUT, printed into the step summary of every run in every repo
+          # carrying this workflow, telling anyone debugging a Qodana failure
+          # to go and reason about a runner pool this org left. Reading the
+          # environment cannot go stale the next time the lane moves, which
+          # is the only property worth having here.
+          github_step_summary "- merge-gate: qodana sentinel ran on the ${RUNNER_ENVIRONMENT:-unknown} runner \`${RUNNER_NAME:-unknown}\` (${RUNNER_OS:-unknown}/${RUNNER_ARCH:-unknown})"
           github_step_summary "- full-scan: qodana-full is deferred unless this event requests the full scan"
           github_step_summary "- qodana-full runs only for schedule/workflow_dispatch, strict mode, or same-repo PRs labeled \`run-qodana\`"
 
