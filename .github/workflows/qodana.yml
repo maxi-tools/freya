@@ -662,6 +662,17 @@ jobs:
       #
       # A PR can still change these files; the sentinel syntax-checks
       # qodana.yaml, and the change takes effect once merged.
+      #
+      # THE BASELINE IS A BOOTSTRAP INPUT for the same reason the rest are.
+      # `.qodana-baseline/qodana.sarif.json` is read from the workspace further
+      # down and passed as `--baseline`, which tells Qodana those problems do
+      # not fail the gate. Taken from the PR tree it is self-certification: a
+      # PR that adds or extends the baseline suppresses the findings that same
+      # PR introduces, and the gate reports green on its own work. Restoring it
+      # from the base means a baseline only ever takes effect once merged --
+      # which is the rule already applied to qodana.yaml, not a new one. The
+      # removal loop below covers the PR-adds-it case, where the base has no
+      # baseline at all.
       - name: Scan pull requests with the base branch's configuration
         if: github.event_name == 'pull_request'
         env:
@@ -681,7 +692,7 @@ jobs:
             git ls-tree -rz --name-only "$tree" |
               while IFS= read -r -d '' f; do
                 case "$f" in
-                  qodana.yaml|qodana.yml|*/.cargo/config|.cargo/config|*/.cargo/config.toml|.cargo/config.toml)
+                  qodana.yaml|qodana.yml|.qodana-baseline/qodana.sarif.json|*/.cargo/config|.cargo/config|*/.cargo/config.toml|.cargo/config.toml)
                     printf '%s\0' "$f"
                     ;;
                 esac
@@ -1625,6 +1636,6 @@ jobs:
       # to upload.
       - name: Upload SARIF to GitHub
         if: always() && steps.scan.outcome != 'skipped'
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d # v3.37.9
         with:
           sarif_file: ${{ runner.temp }}/qodana/results/qodana.sarif.json
