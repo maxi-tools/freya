@@ -1,9 +1,26 @@
 # Shared Qodana CI workflow for maxi-tools repos.
 # Source of truth: maxi-config/workflows/qodana.yml
 #
-# Rolled out with `just ci-audit --root ~/Dev/maxi-tools --apply-qodana`, which
-# copies this file into every repo that already has .github/workflows/qodana.yml
-# and rewrites the QODANA_TOKEN expression to whatever that repo already used.
+# The line above is this payload's OWNERSHIP MARKER, not just a signpost.
+# scripts/sync-maxi-review.sh's `qodana` manifest matches it whole-line to
+# decide whether a repo's copy is ours to replace, so do not reword it, and do
+# not let it appear twice: two occurrences read as ambiguous and the fan-out
+# refuses the repo rather than guessing.
+#
+# Fanned out weekly by .github/workflows/distribute-qodana.yml, which opens a
+# `maxi-config-sync/qodana` PR per repo. Edit it here, not in a consumer.
+#
+# Unlike every other distributed payload this one is RENDERED per repo, by
+# scripts/qodana_render.py: each repo keeps its own nightly `cron:` slot (so 29
+# scans do not land on the container runners at once) and its own
+# `QODANA_TOKEN:` expression. src/bin/ci-audit.rs renders the same two lines
+# when it judges staleness, and scripts/test_qodana_render.py pins the two
+# renderings together against the slots actually deployed in the fleet.
+#
+# `just ci-audit-apply` (ci-audit --apply-qodana) still writes this file into
+# local checkouts, but it is no longer the rollout -- it is a local escape
+# hatch. Depending on somebody remembering to run it is why this was the
+# worst-drifted file in the fleet; see maxi-core#3881.
 
 name: CI / merge-gate
 
@@ -12,24 +29,54 @@ on:
   schedule:
     # Off-hours full scan. PRs get the fast qodana sentinel below.
     - cron: '42 8 * * *'
+  # Kept filtered, unlike pull_request above: suppressing the workflow on a push
+  # costs nothing, because no required check is waiting on it. But the set must
+  # match what the scan itself considers relevant -- it was Rust-only while the
+  # in-job filter had been widened, so a push of pure JS/Python/Go/.NET source
+  # never started the workflow at all in those repos.
   push:
     branches: [master, main]
     paths:
       - '**/*.rs'
+      - '**/*.js'
+      - '**/*.jsx'
+      - '**/*.mjs'
+      - '**/*.cjs'
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.py'
+      - '**/*.go'
+      - '**/*.cs'
+      - '**/*.vb'
+      - '**/*.fs'
       - '**/Cargo.toml'
       - '**/Cargo.lock'
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '**/requirements*.txt'
+      - '**/pyproject.toml'
+      - '**/setup.py'
+      - '**/go.mod'
+      - '**/go.sum'
+      - '**/*.csproj'
+      - '**/*.vbproj'
+      - '**/*.fsproj'
+      - '**/*.sln'
       - 'qodana.yaml'
       - 'workflows/qodana.yml'
       - '.github/workflows/qodana.yml'
+  # DELIBERATELY unfiltered, unlike `push` above. Once a repo follows
+  # docs/ci-economy-rollout.md and requires `CI / merge-gate`, a workflow-level
+  # `paths` filter here does not make the check pass cheaply on a docs-only PR
+  # -- it stops the workflow from running at all, so the required check is never
+  # created and GitHub holds the PR pending forever. That directly contradicts
+  # the documented contract that "docs-only changes run only the merge gate".
+  #
+  # The cheap sentinel therefore runs for every same-repo PR, and the expensive
+  # scan does its own path check below, where skipping costs a pending check
+  # nothing.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
-    paths:
-      - '**/*.rs'
-      - '**/Cargo.toml'
-      - '**/Cargo.lock'
-      - 'qodana.yaml'
-      - 'workflows/qodana.yml'
-      - '.github/workflows/qodana.yml'
 
 concurrency:
   group: qodana-${{ github.repository }}-${{ github.ref }}-${{ github.event_name == 'schedule' && 'nightly' || 'interactive' }}
@@ -59,7 +106,32 @@ jobs:
     # execution, which is a Linux story, and it keeps the Macs free for the
     # container scans. Deliberately NOT asking for container-runtime or
     # tier-fast -- this is trivial work and must not queue behind a scan.
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    #
+    # Same-repo PRs only. This job checks out the PR head SHA (below) onto the
+    # persistent, non-ephemeral self-hosted Linux fleet, whose workspaces and
+    # caches are reused across jobs and repos -- so a fork PR would place
+    # attacker-authored files on shared, long-lived machines.
+    #
+    # TWO conjuncts, deliberately not folded into one.
+    #
+    # The trust half is a NEGATED pull-request test. Only `pull_request` carries
+    # a head repository that can differ from this one, so every other trigger is
+    # admitted by construction and a trigger added to `on:` later cannot be
+    # dropped by forgetting to extend a list.
+    #
+    # The scope half keeps the sentinel on PR/push, which is what it is for:
+    # `schedule` and `workflow_dispatch` exist to run the full scan below.
+    # Admitting them here would also run the degraded-mode merge gate on every
+    # nightly, failing it whenever CI_DEGRADED_UNTIL is unset or expired even
+    # though the requested scan succeeded, and burning another fleet runner to
+    # do it.
+    # See maxi-tools/maxi-config#345.
+    if: >
+      (
+        github.event_name != 'pull_request' ||
+        github.event.pull_request.head.repo.full_name == github.repository
+      ) &&
+      (github.event_name == 'pull_request' || github.event_name == 'push')
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 5
     permissions:
@@ -131,7 +203,55 @@ jobs:
 
 
   qodana-full:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || vars.CI_ENFORCEMENT_MODE == 'strict' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'run-qodana'))
+    # Same-repo PRs only, AND the economy condition below.
+    #
+    # The trust check is an OUTER conjunct, not a clause inside the label
+    # branch. `vars.CI_ENFORCEMENT_MODE == 'strict'` is a disjunct that admits
+    # EVERY pull_request on its own -- label or no label, fork or not -- so with
+    # the check buried one level down, strict mode was an unguarded path onto
+    # the self-hosted fleet, and the label branch next to it made that look
+    # handled.
+    #
+    # Containerising RAISED the stakes rather than lowering them. This job mints
+    # an org-wide GitHub App installation token, writes it into `.qodana/
+    # gitconfig` INSIDE the workspace the container mounts at /data/project, and
+    # checks out `github.event.pull_request.head.sha` -- the fork's own commit,
+    # not the merge commit the RustRover lane used. qodana.yaml's `bootstrap`
+    # then runs `cargo fetch` over that tree, and a fork's Cargo.toml chooses
+    # what that executes. An unguarded fork PR here is org-token disclosure, not
+    # just wasted minutes.
+    #
+    # Hoisting the predicate out of the disjunction is the only shape where
+    # adding a fourth admission reason cannot re-open the door.
+    # See maxi-tools/maxi-config#345.
+    # STRICT MODE NO LONGER DRAGS EVERY PR THROUGH THIS LANE, and that is a cost
+    # change rather than a safety one. Measured 2026-08-26: this job wants
+    # [self-hosted, macOS, ARM64, tier-fast, container-runtime] -- five runners,
+    # four of them busy -- and a maxi-config PR sat QUEUED on it for two hours
+    # while the fleet ran at 25 of 28 runners busy. Every push to every PR in a
+    # strict repo asked that pool for a full containerised inspection.
+    #
+    # What it was buying on a PR was already covered: clippy at -D warnings on
+    # the check lane, CodeQL on four languages, and the nightly full scan below.
+    # A PR that genuinely wants one says so with the `run-qodana` label, and the
+    # schedule keeps whole-repo coverage honest. Nothing about fork safety
+    # changes -- that is the outer conjunct above, and it stays.
+    if: >
+      (
+        github.event_name != 'pull_request' ||
+        (
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.user.login != 'dependabot[bot]'
+        )
+      ) &&
+      (
+        github.event_name == 'schedule' ||
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name != 'pull_request' &&
+         vars.CI_ENFORCEMENT_MODE == 'strict') ||
+        (github.event_name == 'pull_request' &&
+         contains(github.event.pull_request.labels.*.name, 'run-qodana'))
+      )
     continue-on-error: ${{ vars.CI_ENFORCEMENT_MODE != 'strict' }}
     # Qodana for Rust ships only as a Docker image, so this lane needs a
     # container runtime -- which is a CAPABILITY, not a hardware fact, and so is
@@ -146,27 +266,134 @@ jobs:
     # every run since has died on "no such file or directory" -- selecting on a
     # path instead of a capability.
     #
-    # tier-fast for the same reason as the old RustRover lane (maxi-core#3659):
-    # a full inspection is heavy work. On OrbStack these boxes run the
-    # linux/arm64 image natively -- no QEMU -- so an M5 Max here beats a 2-core
-    # ubuntu-latest by a wide margin and costs nothing.
-    runs-on: [self-hosted, macOS, ARM64, tier-fast, container-runtime]
+    # THE LANE MOVED OFF THE MACS, and the reason is availability, not speed.
+    #
+    # It used to be `[self-hosted, macOS, ARM64, tier-fast, container-runtime]`,
+    # justified like this, and the reasoning was correct at the time:
+    #
+    #   tier-fast for the same reason as the old RustRover lane (maxi-core#3659):
+    #   a full inspection is heavy work. On OrbStack these boxes run the
+    #   linux/arm64 image natively -- no QEMU -- so an M5 Max here beats a
+    #   2-core ubuntu-latest by a wide margin and costs nothing.
+    #
+    # What dated is the COMPARISON TARGET. That weighed an M5 Max against a
+    # 2-core `ubuntu-latest`; it never weighed it against the self-hosted Linux
+    # farm, which did not exist in that form. Measured 2026-09-01:
+    #
+    #   macOS + tier-fast + container-runtime   4 online,  0-2 idle
+    #   Linux + X64 + container-runtime + disk 14 total,  7 idle (128 GB boxes)
+    #
+    # The macOS pool is also SHRINKING -- it was 6 that morning and 4 by evening,
+    # after the fleet reconcile correctly revoked maximini24prob's stale
+    # `container-runtime`. Sampled repeatedly between 07:00 and 08:20 UTC it was
+    # at ZERO idle, and that is what produced maxi-core#3834: `qodana-full`
+    # cancelled at 30m59s against `timeout-minutes: 30` on maxibookpro26black,
+    # then passed comfortably on a re-run of the SAME commit once the fleet went
+    # quiet. A timeout that only fires under contention is a flaky check, and it
+    # fails as `cancelled`, which anything gating on `failure` does not see.
+    #
+    # So this trades a possibly-faster run for a run that actually starts. Note
+    # the image arch changes with it: linux/arm64 under OrbStack, linux/amd64
+    # here.
+    #
+    # `disk-large` because a full inspection fetches and indexes the whole
+    # dependency graph. NOT `tier-fast`: that label does not exist on the Linux
+    # farm, and requiring it would silently match nothing.
+    #
+    # PER-REPO OVERRIDE: set the repo variable `QODANA_RUNS_ON` to a JSON array
+    # to send this repo's scan somewhere else. A repo with a meaningful amount
+    # of Apple-gated code wants the Macs, because `cfg(target_os = "macos")`
+    # blocks are NOT analysed on Linux -- cargo simply does not resolve their
+    # dependencies, and the bootstrap swallows that ("expect unresolved
+    # references"), so the scan reports green having covered less. Example:
+    #
+    #   gh variable set QODANA_RUNS_ON --repo maxi-tools/waterui \
+    #     --body '["self-hosted","macOS","ARM64","tier-fast","container-runtime"]'
+    #
+    # Done as a VARIABLE rather than a rendered field on purpose. The rollout
+    # (`ci-audit --apply-qodana`) copies this workflow byte-for-byte apart from
+    # the staggered cron, and `repo_qodana_workflow_is_the_shipped_template`
+    # asserts exactly that. Teaching the renderer a second per-repo
+    # substitution would mean teaching that test a second exception, and a
+    # parity check with a growing exception list stops catching drift -- which
+    # is the failure this repo has already had twice (#499, and #441 where the
+    # fan-out deleted the newer side and the drift test went GREEN).
+    #
+    # Malformed JSON here fails the job loudly at parse time. That is intended:
+    # a silently-ignored override would route the scan to the default pool
+    # while the operator believed otherwise.
+    runs-on: ${{ fromJSON(vars.QODANA_RUNS_ON || '["self-hosted","Linux","X64","container-runtime","disk-large"]') }}
+    # 30 minutes, and that budget now buys analysis instead of a cache
+    # round-trip. maxi-core#3862 read a cancelled run as the Qodana Cloud
+    # publish overrunning the wall. The log says otherwise: on maxi-core run
+    # 33844956233 the Cloud publish took ONE SECOND.
+    #
+    #   07:12:00  The Project analysis stage completed in 19s
+    #   07:12:01  The report is uploaded to https://qodana.cloud/...
+    #   07:12:02  Report is successfully uploaded to https://qodana.cloud/...
+    #   07:12:02  [command]/usr/bin/tar --posix -cf cache.tzst ...
+    #
+    # What was still running eight minutes later -- at 52.8% of 3,306,064,807
+    # bytes when the 30-minute wall killed the job -- is that last line:
+    # `actions/cache` saving `cache.tzst`, queued by the `use-caches: true`
+    # input of `JetBrains/qodana-action`. Its key carried the PR head SHA
+    # (`qodana-2026.1-refs/pull/3858/merge-<sha>`), so it missed on every run
+    # ("No cache found for input keys") and re-uploaded 3.3 GB of Qodana and
+    # Cargo cache into a 10 GB repository quota each time, evicting whatever
+    # else lived there.
+    #
+    # This template drives the image with `docker run` directly (see the scan
+    # step) and keeps the cache in $RUNNER_TEMP on a persistent self-hosted
+    # runner, so there is no Actions-cache leg to overrun. Raising the number
+    # below would only have bought a useless upload more time. A repo still
+    # failing this way is on the old vendored copy and needs re-vendoring, not
+    # a bigger budget.
     timeout-minutes: 30
     permissions:
       contents: read
       pull-requests: write
       checks: write
       security-events: write
+      # `github/codeql-action/upload-sarif` at the end of this job calls
+      # GET /repos/{owner}/{repo}/actions/runs/{run_id} -- the endpoint its own
+      # error message links to -- and that endpoint needs `actions: read` in a
+      # PRIVATE repository. Without it the step died on
+      #
+      #   ##[error]Resource not accessible by integration -
+      #   https://docs.github.com/rest/actions/workflow-runs#get-a-workflow-run
+      #
+      # and, because it carries continue-on-error, still reported success. No
+      # "successfully uploaded" line follows it in that run: the SARIF quietly
+      # never reached code scanning. Same maxi-core run 33844956233.
+      actions: read
     env:
       QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+      # Qodana CLI honors this name. Repository ID makes ownership explicit on
+      # shared runners and lets entry cleanup target exactly this repo's scan.
+      QODANA_CLI_CONTAINER_NAME: qodana-cli-${{ github.repository_id }}
     steps:
+      # `always()` on the redaction step below does not cover a runner that dies:
+      # when the agent loses contact mid-job -- observed repeatedly on this fleet
+      # -- no further step runs, and .qodana/gitconfig is left holding a live App
+      # token in a workspace these non-ephemeral runners reuse across jobs and
+      # repos. Cleaning on ENTRY is the half that survives that, because the next
+      # job on this workspace runs it before anything else. The token's own
+      # ~1-hour lifetime bounds the window; this closes the rest of it.
+      - name: Remove credentials left by a previous job
+        run: rm -rf .qodana
+
       - name: Setup PATH
         run: |
-          {
-            echo "$HOME/.orbstack/bin"
-            echo "/opt/homebrew/bin"
-            echo "/usr/local/bin"
-          } >> "$GITHUB_PATH"
+          # OrbStack and Homebrew are macOS-only. On the Linux farm these
+          # directories do not exist, and adding them anyway is not merely
+          # inert -- it tells the next reader the lane still expects a Mac.
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            {
+              echo "$HOME/.orbstack/bin"
+              echo "/opt/homebrew/bin"
+            } >> "$GITHUB_PATH"
+          fi
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
 
       - name: Locate the container socket
         run: |
@@ -180,15 +407,125 @@ jobs:
           # earn it -- and would have died here on a hardcoded ~/.orbstack path
           # that exists only on macOS. Not /var/run first, because OrbStack only
           # symlinks that when nothing else has claimed it.
-          for sock in "$HOME/.orbstack/run/docker.sock" /var/run/docker.sock; do
-            if [ -S "$sock" ]; then
-              echo "DOCKER_HOST=unix://$sock" >> "$GITHUB_ENV"
-              echo "using container socket: $sock"
-              exit 0
+          # Existence is NOT liveness, and that distinction cost a real job.
+          # A stopped OrbStack leaves its socket file behind; `[ -S ]` accepts
+          # it, DOCKER_HOST gets exported, and the failure surfaces minutes
+          # later inside the linter as
+          #
+          #   ✗ An error occured while connecting to Docker: ... Cannot connect
+          #     to the Docker daemon at unix:///Users/maxi/.orbstack/run/docker.sock
+          #
+          # followed by "Qodana produced no SARIF" -- which reads as a scan
+          # failure attributable to the PR, when it is a runner fault. Observed
+          # on maxi-firmware-core#108, job 98135274625, maximini24pro, while
+          # that box still advertised `container-runtime`.
+          #
+          # So ask the daemon before trusting the socket -- and ask it over the
+          # socket, not through a client.
+          #
+          # The first version of this probe ran `docker version` and was gated
+          # on `command -v docker`, FALLING THROUGH when there was none, on the
+          # reasoning that a socket we cannot probe should not be rejected.
+          # That reasoning inverts the step. A box with a stale socket file, a
+          # dead daemon and no docker CLI on PATH passes the very check that
+          # exists to keep this lane honest against `container-runtime` -- and
+          # that label is deliberately platform-neutral, so a box with no
+          # docker CLI is precisely what it is meant to admit. The gate made
+          # the least-verifiable runner the one that got through.
+          #
+          # `/_ping` is the Engine API's own liveness endpoint: the daemon
+          # serves it, so it answers with no client installed at all, and
+          # Podman's Docker-compatible API serves it too. curl speaks it over
+          # an AF_UNIX socket with --unix-socket and ships on both macOS and
+          # the Linux farm images, so the probe has no fall-through left and a
+          # socket that cannot be verified is not used.
+          #
+          # --max-time bounds the other failure `[ -S ]` cannot see: a socket
+          # that accepts the connection and then never answers. A blocking
+          # read there turns a dead runner into a job-length hang instead of a
+          # ten-second skip to the next candidate.
+          #
+          # One list, used by both the loop and the failure message, so the
+          # two cannot disagree about what was checked. An indexed array rather
+          # than a space-separated string: the string form relies on word
+          # splitting, which a path containing a space breaks silently. Indexed
+          # arrays are fine on the bash 3.2 the macOS runners still ship; it is
+          # associative arrays and mapfile that are not.
+          sockets=("$HOME/.orbstack/run/docker.sock" /var/run/docker.sock)
+          for sock in "${sockets[@]}"; do
+            [ -S "$sock" ] || continue
+            if ! curl -fsS --max-time 10 --unix-socket "$sock" http://localhost/_ping >/dev/null 2>&1; then
+              echo "::warning::$sock exists but the daemon is not answering /_ping; trying the next candidate"
+              continue
             fi
+            echo "DOCKER_HOST=unix://$sock" >> "$GITHUB_ENV"
+            echo "using container socket: $sock"
+            exit 0
           done
-          echo "::error::No container socket on $(hostname -s) (checked ~/.orbstack and /var/run). This runner advertises \`container-runtime\` without a live daemon; run the fleet-label reconcile to revoke it."
+          # Name what was ACTUALLY probed. The previous message hardcoded
+          # "~/.orbstack and /var/run", which on a Linux runner reports a path
+          # that was never relevant -- a message that drifts from the loop is
+          # how an operator is sent to the wrong machine.
+          #
+          # RUNNER_NAME, not `hostname -s`. The fleet's runners share a local
+          # user and register siblings on one box under distinct names, so the
+          # hostname does not necessarily match the registration name and sends
+          # the reader looking for a machine that is not labelled that
+          # anywhere. RUNNER_NAME is the string the runner is registered and
+          # labelled under, which is what a reconcile or a restart acts on --
+          # and it is what made a per-PROCESS problem legible as one, rather
+          # than looking like a whole box coming and going.
+          #
+          # "No live container daemon", not "no container socket": on this path
+          # a socket file may well have been there. Saying so is what stops the
+          # next reader from checking `ls` and concluding the step is wrong.
+          echo "::error::No live container daemon on runner ${RUNNER_NAME:-$(hostname -s)} (checked: ${sockets[*]}; a socket file alone does not count). This runner advertises \`container-runtime\` without a live daemon; run the fleet-label reconcile to revoke it, or restart the runtime on that box."
           exit 1
+      # The Qodana CLI names its container from the project path, so the name
+      # is identical for every run of this repo on a given machine. That is
+      # fine until a run is interrupted: `cancel-in-progress` is on, and a
+      # cancelled scan does not always get its container torn down before the
+      # replacement run starts. When the replacement lands on the SAME runner --
+      # five boxes carry `tier-fast` + `container-runtime`, and the scheduler
+      # gives no round-robin, so it often does -- the CLI dies on
+      # "Conflict. The container name ... is already in use" before analysing a
+      # single file. That is what took this job red on #348.
+      #
+      # A self-hosted runner executes one job at a time, so any container owned
+      # by this repository on entry—including a running one—is cancelled residue.
+      - name: Clear containers left by a cancelled scan
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          stale="$(docker ps -a \
+            --filter "name=^/${QODANA_CLI_CONTAINER_NAME}$" \
+            --format '{{.Names}}')"
+          if [ -z "$stale" ]; then
+            echo "no stale qodana containers on $(hostname -s)"
+            exit 0
+          fi
+          while read -r name; do
+            [ -n "$name" ] || continue
+            if [ "$name" != "$QODANA_CLI_CONTAINER_NAME" ]; then
+              echo "::error::Docker returned an unexpected container: $name"
+              exit 1
+            fi
+            echo "removing stale container: $name"
+            if ! docker rm -f "$name" >/dev/null 2>&1; then
+              if ! remaining="$(docker ps -a \
+                --filter "name=^/${name}$" \
+                --format '{{.Names}}')"; then
+                echo "::error::Could not verify removal of stale Qodana container: $name"
+                exit 1
+              fi
+              if [ -n "$remaining" ]; then
+                echo "::error::Could not remove stale Qodana container: $name"
+                exit 1
+              fi
+            fi
+          done <<< "$stale"
+
       # Fail loudly. The old workflow made every failure path non-fatal --
       # continue-on-error, `|| echo`, and an `if:` that skipped the upload when
       # no results existed -- so a scan that produced nothing still reported
@@ -202,9 +539,9 @@ jobs:
 
       - name: Generate org repo token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ secrets.APP_ID }}
+          client-id: ${{ secrets.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           owner: maxi-tools
 
@@ -214,6 +551,168 @@ jobs:
           # Qodana needs full history to diff a PR against its base.
           fetch-depth: 0
           persist-credentials: false
+
+      # The bootstrap is EXECUTED, as the runner user, on a non-ephemeral
+      # machine, with QODANA_TOKEN in the environment and an org App token about
+      # to be written next to it. On a same-repo pull request every input to it
+      # is attacker-controllable by anyone who can push a branch. The #345 fork
+      # guard does not help here: the exposure is same-repo branches, which that
+      # guard explicitly admits.
+      #
+      # Restoring qodana.yaml alone was NOT sufficient, and review caught three
+      # ways around it:
+      #   * Qodana also reads qodana.yml, so the other extension bypassed it;
+      #   * .cargo/config.toml is PR-controlled and can turn on CLI git fetching
+      #     or set proxy/TLS options, which is enough to route an authenticated
+      #     fetch somewhere it should not go (CWE-295);
+      #   * the base bootstrap still runs npm against the PR's package.json,
+      #     whose install lifecycle scripts execute arbitrary code.
+      #
+      # Every file still consumed by PR bootstrap is taken from the base branch
+      # and removed when the base does not have it. Python installs and .NET
+      # restore are skipped entirely when `.qodana/pr-scan` exists, so their
+      # manifests remain the PR versions for analysis; replacing them would
+      # hide the proposed code from Qodana. npm lifecycle scripts are disabled
+      # separately, in ci/qodana-bootstrap.toml.
+      #
+      # A PR can still change these files; the sentinel syntax-checks
+      # qodana.yaml, and the change takes effect once merged.
+      - name: Scan pull requests with the base branch's configuration
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          fi
+
+          # NUL-delimited enumeration is required here: git quotes unusual
+          # pathnames in its line-oriented output, while the bootstrap receives
+          # the real pathname. Qodana project config is root-only; recursively
+          # matching qodana.yml would replace the workflow being reviewed.
+          select_bootstrap_inputs() {
+            local tree=$1 f
+            git ls-tree -rz --name-only "$tree" |
+              while IFS= read -r -d '' f; do
+                case "$f" in
+                  qodana.yaml|qodana.yml|*/.cargo/config|.cargo/config|*/.cargo/config.toml|.cargo/config.toml)
+                    printf '%s\0' "$f"
+                    ;;
+                esac
+              done |
+              python3 -c 'import sys; out=b"\0".join(sorted(x for x in sys.stdin.buffer.read().split(b"\0") if x)); sys.stdout.buffer.write(out + (b"\0" if out else b""))'
+          }
+
+          select_bootstrap_inputs "$BASE_SHA" > "$RUNNER_TEMP/qd_base_cfg"
+          select_bootstrap_inputs HEAD > "$RUNNER_TEMP/qd_head_cfg"
+
+          while IFS= read -r -d '' f; do
+            # `git checkout` faithfully restores a base-tree symlink, which
+            # would still resolve through the PR worktree and could consume a
+            # PR-modified target. Only ordinary blobs are trusted bootstrap
+            # inputs; reject symlinks (120000), submodules, and exotic modes.
+            entry=$(git ls-tree "$BASE_SHA" -- "$f")
+            mode=${entry%% *}
+            case "$mode" in
+              100644|100755) ;;
+              *)
+                echo "::error::base bootstrap input is not a regular file: $f (mode ${mode:-missing})"
+                exit 1
+                ;;
+            esac
+            mkdir -p "$(dirname "$f")"
+            git checkout "$BASE_SHA" -- "$f"
+          done < "$RUNNER_TEMP/qd_base_cfg"
+
+          # Anything only the PR introduced is removed: falling back to the PR's
+          # copy is the case this exists to stop.
+          python3 -c 'import sys; base=set(open(sys.argv[1], "rb").read().split(b"\0")); head=set(open(sys.argv[2], "rb").read().split(b"\0")); sys.stdout.buffer.write(b"".join(p+b"\0" for p in sorted(head-base) if p))' "$RUNNER_TEMP/qd_base_cfg" "$RUNNER_TEMP/qd_head_cfg" |
+          while IFS= read -r -d '' f; do
+            rm -f -- "$f"
+            echo "::warning::removed a PR-supplied bootstrap input absent from the base branch"
+          done
+
+          # dotnet restore evaluates project-controlled MSBuild targets. Tell
+          # the trusted bootstrap to skip restore for PR scans; analysis still
+          # runs, but no PR project is evaluated beside live credentials.
+          # Checkout may recreate a PR-controlled symlink at this path. Replace
+          # the whole entry before opening the marker so redirection cannot
+          # truncate an arbitrary tracked source file.
+          rm -rf -- .qodana
+          mkdir -p .qodana
+          : > .qodana/pr-scan
+          echo "restored $(tr -cd '\0' < "$RUNNER_TEMP/qd_base_cfg" | wc -c | tr -d ' ') config file(s) from the base branch"
+
+      - name: Resolve the repository's Qodana image
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s qodana.yaml
+
+          # TWO KEYS NAME THE LINTER, and this step reads both. `image:` is a
+          # fully-qualified pin and always wins. `linter:` is the SHORT NAME
+          # that qodana-base.yaml renders into every repo's config
+          # (render_qodana_config_for_repo in src/bin/ci-audit.rs writes
+          # `linter: qodana-rust` and friends), and it is what the fleet
+          # actually carries: reading every non-archived maxi-tools repo on
+          # 2026-09-04, 51 of the 52 that carry this workflow have `linter:`
+          # and no `image:`. maxi-config is the one exception.
+          #
+          # Reading only `image:` was therefore a rollout-wide failure waiting
+          # on a distributor. maxi-core#3900 is the single instance of it --
+          # `qodana-full` dead in six seconds on `<missing>` -- and
+          # .github/workflows/distribute-qodana.yml would have reproduced it in
+          # all 51 the moment it first ran. The fallback below is what makes
+          # that fan-out safe, so do not narrow this back to `image:` alone
+          # without first pinning an `image:` in all 51 configs.
+          read_ref() {
+            awk -v key="$1:" \
+              '$1 == key { value=$2; gsub(/^"|"$/, "", value); print value; exit }' \
+              qodana.yaml
+          }
+          image="$(read_ref image)"
+          source_key=image
+          if [ -z "$image" ]; then
+            image="$(read_ref linter)"
+            source_key=linter
+          fi
+          image="${image#\'}"
+          image="${image%\'}"
+
+          # The tag a short name is given. 2026.1-eap is what maxi-config's own
+          # qodana.yaml pins and what maxi-core#3901 verified end to end on this
+          # fleet -- image resolved, container started ("Qodana for Rust 2026.1
+          # EAP, build QDRST-261.25885"), scan completed. Every linter family in
+          # ci/qodana-bootstrap.toml publishes this tag (rust, python, js,
+          # dotnet, go), so it is not a Rust-only assumption, though every one of
+          # the 51 repos above is in fact qodana-rust.
+          default_tag='2026.1-eap'
+
+          # Normalise, never rewrite. A value that already names a repository or
+          # already carries a tag or digest is left exactly as written, so an
+          # explicit pin -- including an immutable @sha256: one -- survives this
+          # step untouched. Only a bare `qodana-rust` gains anything.
+          if [ -n "$image" ]; then
+            case "$image" in
+              */*) ;;
+              *) image="jetbrains/$image" ;;
+            esac
+            case "$image" in
+              *:*) ;;
+              *) image="$image:$default_tag" ;;
+            esac
+          fi
+
+          # The same allowlist as before, applied to the composed reference: the
+          # derivation can only ever produce an official jetbrains/qodana-*
+          # image, so widening the input has not widened what may run.
+          if [[ ! "$image" =~ ^jetbrains/qodana-[a-z0-9._-]+(:[A-Za-z0-9._-]+|@sha256:[0-9a-f]{64})$ ]]; then
+            echo "::error::qodana.yaml must name an official jetbrains/qodana-* linter, via image: or linter:; got: ${image:-<missing>}"
+            exit 1
+          fi
+          echo "QODANA_IMAGE=$image" >> "$GITHUB_ENV"
+          echo "using Qodana image: $image (from ${source_key}: in qodana.yaml)"
 
       - name: Authorize private crate fetches inside the container
         env:
@@ -239,55 +738,473 @@ jobs:
           # Never let the credential file reach the analysis scope or a commit.
           printf '.qodana/\n' >> .git/info/exclude
 
+      # Path filtering moved here from the `on:` block, where it suppressed the
+      # required check entirely. Fails SAFE: if the diff cannot be read the scan
+      # runs, because a missed scan is a worse outcome than a redundant one.
+      - name: Decide whether this change needs the full scan
+        id: relevant
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "scan=true" >> "$GITHUB_OUTPUT"
+            echo "not a pull request; scanning"
+            exit 0
+          fi
+          if ! changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA") \
+            || [ -z "$changed" ]; then
+            echo "scan=true" >> "$GITHUB_OUTPUT"
+            echo "could not read the diff; scanning rather than guessing"
+            exit 0
+          fi
+          # Every linter this template is rolled out with, not just Rust. The
+          # first version of this filter was Rust-only, which meant a
+          # source-only PR in a qodana-js / -python / -go / -dotnet repo matched
+          # nothing, skipped the scan, and reported success -- a worse failure
+          # than the one it replaced, because it looks like a clean scan.
+          if printf '%s\n' "$changed" | grep -qE '(\.(rs|js|jsx|mjs|cjs|ts|tsx|py|go|cs|vb|fs)$|(^|/)(Cargo\.(toml|lock)|package(-lock)?\.json|requirements[^/]*\.txt|pyproject\.toml|setup\.py|go\.(mod|sum)|.*\.(csproj|vbproj|fsproj|sln))$|(^|/)qodana\.(yaml|yml)$)'; then
+            echo "scan=true" >> "$GITHUB_OUTPUT"
+            echo "source or Qodana config changed; scanning"
+          else
+            echo "scan=false" >> "$GITHUB_OUTPUT"
+            echo "no analyzable source or Qodana config in this change; skipping the full scan"
+          fi
+
+      # Catch host/container mount regressions before project opening can
+      # consume the full 20-minute timeout. This uses the same image and target
+      # path as the real scan, mounts the checkout read-only, and executes no
+      # repository content.
+      - name: Verify the Qodana container can see the checkout
+        if: steps.relevant.outputs.scan == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$GITHUB_WORKSPACE/qodana.yaml"
+          docker run --rm \
+            --entrypoint /bin/sh \
+            --volume "$GITHUB_WORKSPACE:/data/project:ro" \
+            "$QODANA_IMAGE" \
+            -c 'test -s /data/project/qodana.yaml'
+
+      # THE WORKING AREA IS NOT FRESH, so clear the parts of it that are not
+      # deliberately reused. $RUNNER_TEMP survives between jobs on a persistent
+      # runner, and `results/` is pure OUTPUT: nothing reads it from a previous
+      # run, but the assertion after the scan tests `[ -s "$sarif" ]`, which a
+      # previous run's report satisfies. A scan that dies before writing SARIF
+      # on a box that has scanned before therefore asserts against, and uploads,
+      # an EARLIER COMMIT'S findings under this commit's name (maxi-config#549).
+      # The job is still red in that case -- but a code-scanning row attributed
+      # to the wrong commit is worse than a missing row, because a missing row
+      # is visibly missing while a wrong row looks like data.
+      #
+      # AN ALLOWLIST, NOT A FOURTH BESPOKE GUARD. This is the fourth instance
+      # today of "on a persistent runner, the presence of a file is not evidence
+      # it belongs to this run" (#503 JBR, maxi-core#3891 venvs, #547 rustup,
+      # #549 here), and the first three each needed their own hand-written
+      # check. They needed one because a cache is REUSED ON PURPOSE: clearing it
+      # is the same as not having it, so the only available move is to verify it
+      # is complete. Everything else under $RUNNER_TEMP/qodana has no such
+      # claim, so the default here is inverted -- sweep every entry, and keep
+      # only what is named below. A new output directory added by a future
+      # change is then safe without anyone remembering it exists; a new CACHE
+      # has to be added to `keep`, and that edit is the place to notice it now
+      # needs a completeness check of its own, like the two steps below it.
+      - name: Clear the stale Qodana working area
+        if: steps.relevant.outputs.scan == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Validated before the `rm -rf`, for the same reason as the guards
+          # below: `set -u` does not catch set-but-empty, and an empty value
+          # would aim this at /qodana/*.
+          if [ -z "${RUNNER_TEMP:-}" ]; then
+            echo "::error::RUNNER_TEMP is unset or empty; refusing to guess where the Qodana working area is"
+            exit 1
+          fi
+          qd_root="$RUNNER_TEMP/qodana"
+          [ -d "$qd_root" ] || { echo "no Qodana working area yet"; exit 0; }
+          # Space-delimited, matched whole-word by the `case` below. `caches`
+          # is Qodana's own /data/cache mount -- the JBR runtime, the CLI's
+          # config-loader jar, CARGO_HOME -- and it is kept because the scan
+          # WRITES INTO IT WHILE IT RUNS, not because it survives between runs.
+          #
+          # IT DOES NOT SURVIVE, and this comment used to say it did. The
+          # Actions runner empties $RUNNER_TEMP at the start of every job, so
+          # this step prints "no Qodana working area yet" and the JBR guard
+          # below prints "no JBR cache yet" on every run measured -- maxi-core
+          # 34162181508 (ml-node-3), 34161752539 (maxibaobab-4), 34076840441
+          # (maxicoconut-3). Nothing under here is warm.
+          #
+          # That false premise is what maxi-config#557 cost: RUSTUP_HOME was
+          # pointed into this tree to "warm" it, and instead handed rustup an
+          # empty home in place of the complete one the image ships. Do not
+          # move a tool's HOME here on the strength of the word "cache"; the
+          # guards below exist for boxes where the tree DOES persist, and a
+          # guard is not the same as a warm cache.
+          keep="caches"
+          swept=0
+          for entry in "$qd_root"/* "$qd_root"/.[!.]*; do
+            # Unmatched globs come through literally; nothing else filters them.
+            # `-L` as well as `-e` because `-e` FOLLOWS the link: a dangling
+            # symlink is false to `-e`, so it would be skipped here and survive
+            # every sweep, in a step whose whole premise is that anything not
+            # named in `keep` goes. `rm -rf` on a symlink removes the link,
+            # never what it points at.
+            [ -e "$entry" ] || [ -L "$entry" ] || continue
+            name="${entry##*/}"
+            case " $keep " in
+              *" $name "*)
+                echo "keeping $name (reused across runs by design)"
+                continue
+                ;;
+            esac
+            echo "clearing stale working directory from a previous run: $entry"
+            rm -rf "$entry"
+            swept=$((swept + 1))
+          done
+          echo "stale Qodana working entries cleared: $swept"
+
+      # A cached JBR version directory that exists but is EMPTY is worse than
+      # no cache at all: the CLI treats the version as already downloaded,
+      # skips the fetch, then dies with "failed to compute Qodana JBR path:
+      # failed to find JBR root directory in extracted archive". The first
+      # scan on a runner works (it does the download); every scan after it
+      # fails, permanently, until someone clears the directory by hand.
+      #
+      # Measured on maxicoconut-4 (maxi-config#503): after one good scan,
+      # caches/qodana-jbr/qodana-jbrsdk-25.0.2-linux-x64-b329.66 existed at
+      # 8K -- the directory, none of the runtime. Two consecutive re-runs
+      # then failed in 36s and 39s. Sibling runners that had never scanned
+      # had no qodana-jbr at all and would have worked exactly once each.
+      #
+      # Dropping an incomplete entry costs one re-download; keeping it costs
+      # every future scan on that box.
+      - name: Drop an incomplete JBR cache
+        if: steps.relevant.outputs.scan == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          jbr_root="$RUNNER_TEMP/qodana/caches/qodana-jbr"
+          [ -d "$jbr_root" ] || { echo "no JBR cache yet"; exit 0; }
+          dropped=0
+          for d in "$jbr_root"/*/; do
+            [ -d "$d" ] || continue
+            # Any regular file is enough to call it populated; an aborted
+            # extraction leaves the version directory with none.
+            #
+            # Probe and test SEPARATELY, and do not silence the probe. Writing
+            # this as `[ -z "$(find ... 2>/dev/null)" ]` collapses "find
+            # failed" into "found nothing" -- and the branch below DELETES on
+            # that, so a permission error or an unexpected find would wipe a
+            # good cache on every run, silently. A probe that cannot answer
+            # means unknown, and unknown must leave the cache alone.
+            if ! contents="$(find "$d" -type f)"; then
+              echo "::warning::could not inspect $d; leaving it in place"
+              continue
+            fi
+            if [ -z "$contents" ]; then
+              echo "::warning::dropping incomplete JBR cache on $(hostname -s): $d"
+              rm -rf "$d"
+              dropped=$((dropped + 1))
+            fi
+          done
+          echo "incomplete JBR cache entries dropped: $dropped"
+
       - name: Qodana Scan
         id: scan
-        uses: JetBrains/qodana-action@4861e015da555e86a72b862892aba6c2b93e6891 # v2026.1.3
+        if: steps.relevant.outputs.scan == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/qodana/results" "$RUNNER_TEMP/qodana/caches"
+
+          qodana_args=(--property=idea.headless.enable.statistics=false)
+
+          # THE CONTAINER'S RUST ENVIRONMENT, and the whole of maxi-config#557.
+          #
+          # CARGO_HOME has to be a path the container user can WRITE. The
+          # image's own /usr/local/cargo is root-owned and this lane runs the
+          # image as the runner's uid, so without this line the bootstrap's
+          # `cargo fetch` dies on "failed to create directory
+          # /usr/local/cargo/registry/...: Permission denied". /data/cache is
+          # per-job scratch, not a warm cache (see the sweep step above), so a
+          # cold fetch on every scan is the price and it is a cheap one.
+          #
+          # RUSTUP_HOME IS DELIBERATELY NOT SET. It used to be
+          # /data/cache/rustup, on the theory that $RUNNER_TEMP is reused
+          # between runs. It is not: the runner empties it every job, so the
+          # override did not warm a cache, it SHADOWED the complete rustup home
+          # the image ships at /usr/local/rustup -- Rust 1.94.0 with rust-src,
+          # installed by `rustup-init --default-toolchain` -- with an empty
+          # directory holding no toolchains and no default. Every cargo call
+          # then died with
+          #
+          #     error: rustup could not choose a version of cargo to run,
+          #     because one wasn't specified explicitly, and no default is
+          #     configured.
+          #
+          # and the scan reported `Analysis scope: 0 packages across 1 Cargo
+          # projects` while still publishing a report and a green check: 61
+          # findings on maxi-core, 46 of them in Cargo.toml and 45 of those
+          # TomlUnresolvedReference -- the analyser reporting its own failure to
+          # resolve as if it were the repository's code. 55 of the 62 repos on
+          # the qodana-rust image carry no rust-toolchain.toml, so all 55 were
+          # scanning nothing and reporting it as a clean bill of health.
+          #
+          # This also retires #547/#548's "Drop an incomplete rustup cache"
+          # step. That guard was written for a toolchain directory that exists
+          # without its binaries; it exits early on `[ -d toolchains ]`, and an
+          # emptied $RUNNER_TEMP has no such directory, so it printed "no
+          # rustup toolchain cache yet" on every run of the failure it stood
+          # next to. With the toolchain back in the image there is no cache
+          # directory left to be half-populated, so the guard is deleted rather
+          # than left printing reassurance about a path this lane no longer
+          # creates.
+          docker_env=(--env CARGO_HOME=/data/cache/cargo)
+
+          if [[ "$QODANA_IMAGE" == jetbrains/qodana-rust:* ]] \
+            || [[ "$QODANA_IMAGE" == jetbrains/qodana-rust@* ]]; then
+            qodana_args+=(--property=qd.rust.configuration.timeout.minutes=20)
+
+            # PIN THE ANALYSIS TO THE TOOLCHAIN THE IMAGE ALREADY HAS, because
+            # reading /usr/local/rustup is safe and writing to it is not.
+            #
+            # It is root-owned 0755 and ships exactly one toolchain. A repo
+            # with a rust-toolchain.toml naming a different channel turns
+            # reading that directory into installing into it, and the scan dies
+            # on
+            #
+            #     error: could not create temp file /usr/local/rustup/tmp/...:
+            #     Permission denied (os error 13)
+            #
+            # before a file is analysed -- observed in maxi-tools/waterui run
+            # 33529368644, 45s after its pin landed. That failure is why
+            # RUSTUP_HOME was moved to the mount in the first place, so simply
+            # dropping the override would trade 55 broken repos for the 7
+            # pinned ones (maxi-config, maxi-ml, maxi-kvm, maxi-mux, freya,
+            # waterui, maxi-warp-spike).
+            #
+            # RUSTUP_TOOLCHAIN outranks rust-toolchain.toml, so nothing asks
+            # rustup to install anything and the read-only home is enough. The
+            # org pin exists so clippy's LINT SET matches between workstation
+            # and CI (rust-toolchain.toml says so in its header); Qodana runs
+            # its own inspections, not clippy, and needs only a cargo that can
+            # resolve the graph. The image's toolchain is also the one carrying
+            # rust-src, which is what the Rust plugin resolves std against -- a
+            # rustup-installed pin under `profile = "minimal"` would not have
+            # it.
+            #
+            # Read out of the image rather than hardcoded, so an image bump
+            # cannot leave this pointing at a toolchain that is no longer
+            # there, and an image that ships none fails HERE, loudly, instead
+            # of producing another zero-package report.
+            #
+            # The probe RUNS CARGO under the name it is about to export, rather
+            # than trusting the name it parsed. Both halves of #557 were a
+            # rustup that resolved to nothing while everything around it looked
+            # healthy, so the only probe worth having is the one that answers
+            # the actual question -- does `cargo` run? -- and it costs one
+            # container start against an image that is already local.
+            #
+            # `|| image_toolchain=` so a probe that cannot run at all reaches
+            # the error below instead of aborting the step under `set -e` with
+            # docker's exit code and no explanation of what it was for.
+            image_toolchain="$(docker run --rm --entrypoint /bin/sh "$QODANA_IMAGE" -c '
+              set -e
+              t=$(rustup show active-toolchain | head -n 1 | cut -d " " -f 1)
+              test -n "$t"
+              RUSTUP_TOOLCHAIN=$t cargo --version >/dev/null
+              printf %s "$t"
+            ')" || image_toolchain=
+            if [ -z "$image_toolchain" ]; then
+              echo "::error::$QODANA_IMAGE has no usable default rustup toolchain, so cargo cannot run and the scan would resolve 0 packages -- see maxi-config#557"
+              exit 1
+            fi
+            echo "rust toolchain: $image_toolchain (from the image, read-only)"
+            docker_env+=(--env "RUSTUP_TOOLCHAIN=$image_toolchain")
+          fi
+
+          # The committed baseline, when this repo carries one. qodana-base.yaml
+          # ships `failureConditions.severityThresholds.any: 0`, and this lane
+          # runs a FULL scan -- there is no pr-mode here, so a PR is measured
+          # against the whole tree, not against its own diff. Without a baseline
+          # that combination fails every PR in every repo that has any
+          # pre-existing finding, which is most of them: maxi-core alone
+          # reported 2187 on 2026-08-31.
+          #
+          # CONDITIONAL on the file existing, and that is the load-bearing part.
+          # This template is rolled out to ~90 repos and they will not all gain
+          # a baseline at once. Passing --baseline unconditionally would point
+          # every baseline-less repo at a missing file, turning "no baseline
+          # yet" into a hard scan failure -- swapping a gate that is too strict
+          # for one that cannot run at all.
+          #
+          # Path is relative to the project root, which is the container's
+          # /data/project mount. Deliberately not `.qodana/`, Qodana's own
+          # default: this workflow uses `.qodana/` for the container gitconfig
+          # credentials and `rm -rf`s it afterwards.
+          if [ -s "$GITHUB_WORKSPACE/.qodana-baseline/qodana.sarif.json" ]; then
+            qodana_args+=(--baseline .qodana-baseline/qodana.sarif.json)
+            echo "baseline: .qodana-baseline/qodana.sarif.json (known problems will not fail the gate)"
+          else
+            echo "baseline: none committed; every existing problem counts against failureConditions"
+          fi
+
+          # SARIF `versionControlProvenance[0].repositoryUri` -- maxi-config#544.
+          #
+          # GitHub's code-scanning ingest REJECTS the whole report without it:
+          #
+          #   Unable to upload "qodana.sarif.json" ... is not valid SARIF:
+          #   instance.runs[0].versionControlProvenance[0] requires property
+          #   "repositoryUri"
+          #
+          # The field is written by Qodana's GitReportContributor, which takes
+          # the remote from QODANA_REMOTE_URL and, failing that, from the
+          # tracking remote of the CURRENT BRANCH:
+          #
+          #   val branch = QODANA_BRANCH ?: repository?.currentBranch?.name
+          #   var url = QODANA_REMOTE_URL
+          #   if (url == null) {
+          #     name ?: return null
+          #     val info = repository?.getBranchTrackInfo(name) ?: return null
+          #     url = info.remote.firstUrl ?: return null
+          #   }
+          #
+          # BOTH fallbacks are dead in this lane. `actions/checkout` above is
+          # given an explicit `ref:` SHA, so the workspace sits on a DETACHED
+          # HEAD -- no current branch, therefore no branch tracking config to
+          # read a remote from. And this template drives the image with
+          # `docker run`, so the container sees only the variables named on the
+          # invocation below, not the runner's GITHUB_* environment.
+          #
+          # `JetBrains/qodana-action` never had to set any of this, which is
+          # why nobody noticed: it ran the Qodana CLI on the HOST, where the
+          # CLI's own CI detection (cucumber/ci-environment, via
+          # internal/platform/qdenv) reads GITHUB_SERVER_URL, GITHUB_REPOSITORY
+          # and GITHUB_SHA and exports QODANA_REMOTE_URL / QODANA_BRANCH /
+          # QODANA_REVISION into the container for it. Re-vendoring to a direct
+          # `docker run` removed that step silently -- the scan still ran, the
+          # SARIF was still written, and only the upload at the end of the job
+          # knew anything was wrong. It is exactly #526's shape one layer down,
+          # and it is why the 5 PUBLIC repos still on the old workflow were the
+          # only ones delivering.
+          #
+          # The values below reproduce what that CI detection produced, so the
+          # provenance block matches the lane GitHub was already accepting
+          # rather than a fresh guess at it: the remote carries the `.git`
+          # suffix -- `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git` is
+          # verbatim what cucumber/ci-environment emits -- and the branch
+          # falls back from GITHUB_HEAD_REF (empty outside a pull request) to
+          # GITHUB_REF_NAME. The revision is read from the checkout rather than
+          # from an event payload, so it names the commit actually analysed --
+          # `git rev-parse` on its own line because `export x="$(cmd)"` would
+          # swallow a non-zero status from the substitution.
+          qd_revision="$(git rev-parse HEAD)"
+          export QODANA_REMOTE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          export QODANA_BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          export QODANA_REVISION="$qd_revision"
+          export QODANA_JOB_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          echo "provenance: remote=$QODANA_REMOTE_URL branch=$QODANA_BRANCH revision=$QODANA_REVISION"
+
+          # Published for the freshness assertion after the scan, which has to
+          # compare the report's stamp against WHAT THIS RUN HANDED THE
+          # CONTAINER -- not against GITHUB_SHA. `actions/checkout` above pins
+          # `github.event.pull_request.head.sha || github.sha`, so on a pull
+          # request the analysed commit is the HEAD sha while GITHUB_SHA is the
+          # merge commit, and comparing against GITHUB_SHA would fail every PR.
+          #
+          # Written HERE, before `docker run`, so the values survive a scan
+          # that fails -- which is precisely the case the assertion exists for.
+          {
+            echo "revision=$qd_revision"
+            echo "job_url=$QODANA_JOB_URL"
+            echo "remote_url=$QODANA_REMOTE_URL"
+          } >> "$GITHUB_OUTPUT"
+
+          # qodana-action 2026.1.3 repeatedly mounted an empty /data/project on
+          # the macOS OrbStack fleet even though the identical direct bind mount
+          # above contained Cargo.toml. Use the image's supported Docker
+          # interface directly so every path is explicit and testable.
+          #
+          # `tee` because the assertion after this step has to be able to read
+          # what the analyser SAID, not only what it wrote: `Analysis scope: 0
+          # packages` and the bootstrap's own fetch-failed marker are the only
+          # evidence that a report describes nothing, and both are lines in
+          # this output. `set -o pipefail` is already in force, so the pipe
+          # does not swallow a failing scan. 2>&1 because rustup and cargo
+          # write their failures to stderr.
+          docker run --rm \
+            --name "$QODANA_CLI_CONTAINER_NAME" \
+            --user "$(id -u):$(id -g)" \
+            --volume "$GITHUB_WORKSPACE:/data/project" \
+            --volume "$RUNNER_TEMP/qodana/results:/data/results" \
+            --volume "$RUNNER_TEMP/qodana/caches:/data/cache" \
+            --env QODANA_TOKEN \
+            --env QODANA_REMOTE_URL \
+            --env QODANA_BRANCH \
+            --env QODANA_REVISION \
+            --env QODANA_JOB_URL \
+            "${docker_env[@]}" \
+            "$QODANA_IMAGE" \
+            "${qodana_args[@]}" 2>&1 | tee "$RUNNER_TEMP/qodana/scan.log"
+
+      # THE ONE FAILURE MODE THIS LANE COULD NOT EXPLAIN. When the scan dies
+      # before writing SARIF, `qodana scan` prints
+      #
+      #     ✗  Qodana exited with code 1
+      #     !  Check ./logs/ in the results directory for more information
+      #
+      # and nothing else. The assertion below then fails for want of SARIF --
+      # correctly -- and the SARIF upload after it finds no file, so the results
+      # directory it is pointing at never leaves the runner. The log says where
+      # the answer is and there is no way to reach it.
+      #
+      # Observed on maxi-config main, 2026-08-26: qodana-full failing on every
+      # push after the lane moved from the Macs to
+      # [self-hosted, Linux, X64, container-runtime], with no diagnosable
+      # output on any of them.
+      #
+      # BEFORE the assertion, so it runs on the path where the scan produced
+      # nothing -- which is the only path that needs it. continue-on-error
+      # because a missing logs directory must not become a second failure on
+      # top of the one being diagnosed.
+      - name: Upload the Qodana logs when the scan produced nothing
+        if: always() && steps.scan.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          # The linter and profile come from qodana.yaml so that one file is the
-          # source of truth for every repo, rather than being split across YAML
-          # here and YAML there.
-          # -e CARGO_HOME: the container runs as the RUNNER's uid (the CLI
-          # defaults to the current system user), which does not own the
-          # image's /usr/local/cargo. Without this, bootstrap's `cargo fetch`
-          # dies on "failed to create directory
-          # /usr/local/cargo/registry/cache: Permission denied" before a single
-          # file is analyzed. Pointing CARGO_HOME at the mounted cache dir keeps
-          # it writable AND persists it through the action's own cache, rather
-          # than re-downloading the index every run.
-          #
-          # The Rust configuration timeout defaults low enough that a large
-          # workspace loses to it before analysis starts -- maxi-tools-archive
-          # died on "qd.rust.configuration.timeout.minutes timeout reached"
-          # while resolving cargo metadata. 20 minutes sits under the job's own
-          # 30-minute cap, so the job still bounds it.
-          #
-          # Deliberately not `--user 0:0`. Root would also fix the write, and
-          # would leave root-owned files in a workspace that a non-ephemeral
-          # self-hosted runner reuses for the next job.
-          args: >-
-            --property=idea.headless.enable.statistics=false
-            -e CARGO_HOME=/data/cache/cargo
-            --property=qd.rust.configuration.timeout.minutes=20
-          pr-mode: ${{ github.event_name == 'pull_request' }}
-          # `upload-result: false` on purpose. It uploads a full HTML report to
-          # GitHub artifacts on every run, and Qodana Cloud already stores that
-          # -- per-project, with history. Duplicating it across ~90 repos is
-          # what exhausted the account-wide artifact quota twice in one evening,
-          # which then fails every OTHER workflow's uploads too, including the
-          # lane-package -> lane-sign-publish handoff the release path needs.
-          # The small SARIF is still uploaded below for diagnosing a red gate.
-          upload-result: false
-          use-caches: true
-          post-pr-comment: ${{ github.event_name == 'pull_request' }}
-          use-annotations: true
-        env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+          # github.job as well as the run identifiers: run_id is shared by
+          # every job in a run, so a second job uploading logs -- or this one
+          # becoming a matrix -- would collide on the name and the upload would
+          # fail at the moment it is most needed. (codacy, #435.)
+          name: qodana-logs-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
+          # BOTH spellings. The CLI prints "Check ./logs/ in the results
+          # directory", but the layout has not been stable across linter
+          # versions and a second step existed here to cover `log/` -- with a
+          # fixed artifact name that would collide, and gated on exactly the
+          # same condition as this one. One step, both paths, one name.
+          path: |
+            ${{ runner.temp }}/qodana/results/logs
+            ${{ runner.temp }}/qodana/results/log
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: Assert the scan produced a report
         # Not a bare always(): if an earlier step failed the scan never ran,
         # and asserting on its output reports a second, misleading failure
         # about missing SARIF. Only meaningful once the scan attempted.
         if: always() && steps.scan.outcome != 'skipped'
+        env:
+          # Through the environment rather than interpolated into the script
+          # body, so a step output can never be spliced into the code that runs.
+          EXPECTED_REVISION: ${{ steps.scan.outputs.revision }}
+          EXPECTED_JOB_URL: ${{ steps.scan.outputs.job_url }}
+          # The repository under analysis, so the revision stamp is compared
+          # against ITS provenance entry and not against a submodule's.
+          EXPECTED_REMOTE_URL: ${{ steps.scan.outputs.remote_url }}
         run: |
           set -euo pipefail
           sarif="$RUNNER_TEMP/qodana/results/qodana.sarif.json"
@@ -295,6 +1212,244 @@ jobs:
             echo "::error::Qodana produced no SARIF at $sarif. This is the failure mode the RustRover-based workflow hid for months -- do not make it non-fatal again."
             exit 1
           fi
+          # DELIVERY, asserted here rather than discovered by GitHub. The
+          # upload step below rejects the entire report when a
+          # `versionControlProvenance` entry carries no `repositoryUri`
+          # (maxi-config#544), and it says so in a message about SARIF schemas
+          # rather than about the env vars exported at the scan step. Fail here,
+          # naming the cause, so the next regression of that export costs one
+          # log line instead of an archaeology session.
+          #
+          # Absent array: a WARNING, not a failure. GitHub accepts SARIF with no
+          # versionControlProvenance at all, so a linter build that stops
+          # emitting it is a change to notice, not a reason to fail a scan that
+          # would upload cleanly. Present-but-empty is the exact shape that gets
+          # rejected, and that is fatal.
+          # FRESHNESS, from the same parse. The sweep at the top of the job
+          # removes the one path we know of by which a previous run's report
+          # survives into `[ -s "$sarif" ]` above; this catches the paths we do
+          # not know of, and costs nothing extra because the file is open
+          # already.
+          #
+          # Two stamps, both carrying values THIS workflow exported into the
+          # container: versionControlProvenance[].revisionId (QODANA_REVISION)
+          # and automationDetails.properties.jobUrl (QODANA_JOB_URL). Both are
+          # confirmed present in a real report from this lane rather than
+          # assumed -- the qodana-sarif artifact of run 33928433016 carries
+          # revisionId 2c17c66b7974375554c8470a98def377592fdb77, the commit
+          # that run analysed.
+          #
+          # WHAT THIS CANNOT CATCH, written down so nobody retires the sweep on
+          # the strength of it: GITHUB_RUN_ID is stable across re-run ATTEMPTS
+          # and a re-run analyses the same commit, so attempt 2's stamps equal
+          # attempt 1's. A report left by the previous attempt on the same box
+          # is exactly the shape #547 and maxi-core#3891 were both observed in.
+          # The sweep is the load-bearing half; this is the net under it.
+          #
+          # Which is also why the jobUrl is the WEAKER of the two stamps and
+          # must never be allowed to excuse the other. QODANA_JOB_URL names
+          # only the run -- no attempt, no job id -- so every job of a run and
+          # every attempt of it share one value. The revision is what can still
+          # disagree, and it is compared for the repository under analysis
+          # only: `actions/checkout` with submodules produces one provenance
+          # entry per checked-out repository, each carrying its own commit, and
+          # a submodule's commit was never this run's to match.
+          #
+          # An absent stamp is a WARNING, like an absent provenance array
+          # above. An empty EXPECTED_* means the scan step died before it
+          # recorded what it handed the container -- unknown, not wrong, and
+          # unknown must not be reported as a mismatch.
+          python3 - "$sarif" "${EXPECTED_REVISION:-}" "${EXPECTED_JOB_URL:-}" "${EXPECTED_REMOTE_URL:-}" <<'PROVEOF'
+          import json, sys
+
+          sarif_path, expected_revision, expected_job_url, expected_remote = sys.argv[1:5]
+
+          # A bare `json.load(open(...))["runs"]` reports an unreadable or
+          # truncated report as a Python traceback -- a real failure delivered
+          # as a crash, which is the opposite of what this step is for. The
+          # upload below cannot survive such a file either, so name what is
+          # wrong with it and stop.
+          try:
+              with open(sarif_path) as handle:
+                  document = json.load(handle)
+          except (OSError, ValueError) as exc:
+              print(f"::error::cannot read {sarif_path}: {exc!r}")
+              sys.exit(1)
+
+
+          def bad_shape(where, found, expected):
+              """Report a structurally wrong report, where the shape is relied on.
+
+              Widening the handler above was the other option and it is wrong
+              twice over. `document["runs"]` on a JSON ARRAY raises TypeError
+              inside that try, but a `runs` that is a string or an object
+              raises AttributeError down in the loop, OUTSIDE it -- so catching
+              more exception types at the read would still leave a traceback.
+              And a file that parsed perfectly well would then be reported as
+              one that "cannot be read". What is wrong is the SHAPE; only a
+              check at the point of use can name which part of it, and what
+              was found there instead.
+              """
+              print(
+                  f"::error::{sarif_path} is not a usable SARIF report: {where} "
+                  f"must be {expected}, found {type(found).__name__}. Code "
+                  "scanning would reject this file."
+              )
+              sys.exit(1)
+
+
+          def repo_key(uri):
+              """`host/owner/name`, lowercased -- what two spellings of ONE repo share.
+
+              Qodana copies repositoryUri out of QODANA_REMOTE_URL, which the
+              scan step exports as
+              `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git`. A SUBMODULE's
+              entry is whatever that submodule's own remote says, and those are
+              written by hand: scp form (`git@github.com:owner/name.git`),
+              `ssh://`, no `.git` suffix, a trailing slash. Normalise all of
+              them so the comparison is about identity, not spelling.
+
+              The whole host-and-path is the key, never the basename:
+              `other-org/maxi-config` is a DIFFERENT repository that merely
+              shares a name, and accepting it would let some other project's
+              commit stand in for this run's.
+              """
+              if not isinstance(uri, str) or not uri.strip():
+                  return None
+              text = uri.strip()
+              if "://" in text:
+                  text = text.split("://", 1)[1]
+              else:
+                  # scp-like `[user@]host:path` -- that colon is a separator,
+                  # not a port, and only this form omits the scheme.
+                  head, sep, tail = text.partition(":")
+                  if sep and not tail.startswith("/"):
+                      text = head + "/" + tail
+              text = text.split("?", 1)[0].split("#", 1)[0]
+              # Userinfo lives in the authority and nowhere else, so strip it
+              # from the authority rather than from the whole string.
+              authority, slash, path = text.partition("/")
+              text = authority.split("@", 1)[-1] + slash + path
+              text = text.rstrip("/")
+              if text.endswith(".git"):
+                  text = text[: -len(".git")]
+              return text.lower() or None
+
+
+          if not isinstance(document, dict):
+              bad_shape("the top level", document, "an object")
+          runs = document.get("runs")
+          if not isinstance(runs, list):
+              bad_shape("runs", runs, "an array")
+
+          expected_key = repo_key(expected_remote)
+
+          missing = []
+          stale = []
+          stamped = False
+          saw_revision = False
+          matched_root = False
+          for i, run in enumerate(runs):
+              if not isinstance(run, dict):
+                  bad_shape(f"runs[{i}]", run, "an object")
+              # automationDetails is optional metadata, not structure this step
+              # walks, so a malformed one costs its stamp and nothing else --
+              # the "could not confirm" warning below reports the loss.
+              details = run.get("automationDetails")
+              details = details if isinstance(details, dict) else {}
+              properties = details.get("properties")
+              properties = properties if isinstance(properties, dict) else {}
+              job_url = properties.get("jobUrl")
+              if job_url and expected_job_url:
+                  stamped = True
+                  if job_url != expected_job_url:
+                      stale.append(f"runs[{i}].automationDetails names job {job_url}")
+              prov = run.get("versionControlProvenance")
+              if prov is None:
+                  print(f"::warning::runs[{i}] carries no versionControlProvenance")
+                  continue
+              if not isinstance(prov, list):
+                  bad_shape(f"runs[{i}].versionControlProvenance", prov, "an array")
+              for j, entry in enumerate(prov):
+                  if not isinstance(entry, dict):
+                      bad_shape(
+                          f"runs[{i}].versionControlProvenance[{j}]", entry, "an object"
+                      )
+                  uri = entry.get("repositoryUri")
+                  key = repo_key(uri)
+                  if key is None:
+                      missing.append(f"runs[{i}].versionControlProvenance[{j}]")
+                  else:
+                      print(f"provenance: runs[{i}] repositoryUri={uri}")
+                  revision = entry.get("revisionId")
+                  if not (revision and expected_revision):
+                      continue
+                  saw_revision = True
+                  # SCOPED TO THE REPOSITORY UNDER ANALYSIS, and scoped is not
+                  # the same as switched off. A checkout with submodules hands
+                  # Qodana one provenance entry per checked-out repository,
+                  # each stamped with ITS OWN commit, so comparing every entry
+                  # against this run's revision calls a healthy scan stale.
+                  #
+                  # The other proposed remedy -- skip the revision check once
+                  # the jobUrl has matched -- would have gutted the guard.
+                  # QODANA_JOB_URL is `.../actions/runs/${GITHUB_RUN_ID}` with
+                  # no attempt and no job id in it, so it is identical for
+                  # every job of a run and stable across re-run ATTEMPTS. A
+                  # leftover report whose jobUrl matches is the ordinary case,
+                  # not the safe one, and its revision is the only stamp left
+                  # that can still disagree.
+                  if expected_key is None or key != expected_key:
+                      print(
+                          f"::notice::runs[{i}].versionControlProvenance[{j}] "
+                          f"describes {uri}, not the repository under analysis; "
+                          "its revision is not this run's to check"
+                      )
+                      continue
+                  matched_root = True
+                  stamped = True
+                  if revision != expected_revision:
+                      stale.append(
+                          f"runs[{i}].versionControlProvenance[{j}] names "
+                          f"commit {revision}"
+                      )
+
+          failed = False
+          if missing:
+              print(
+                  "::error::Qodana emitted versionControlProvenance without "
+                  "repositoryUri at " + ", ".join(missing) + ". GitHub code "
+                  "scanning will reject this report. QODANA_REMOTE_URL was not "
+                  "visible inside the container -- see maxi-config#544."
+              )
+              failed = True
+          if stale:
+              print(
+                  "::error::this SARIF was not produced by this run: "
+                  + "; ".join(stale)
+                  + f". Expected commit {expected_revision} from job "
+                  f"{expected_job_url}. A previous run's report survived in "
+                  "$RUNNER_TEMP/qodana/results and would have been uploaded to "
+                  "code scanning under this commit -- see maxi-config#549."
+              )
+              failed = True
+          if saw_revision and not matched_root and not failed:
+              print(
+                  "::warning::no versionControlProvenance entry names "
+                  f"{expected_remote or '<unrecorded>'}, the repository under "
+                  "analysis, so no revision stamp could be checked against this "
+                  "run -- every entry present describes some other repository."
+              )
+          if not stamped and not failed:
+              print(
+                  "::warning::could not confirm this SARIF belongs to this run: "
+                  "the report carries no revisionId or jobUrl, or the scan step "
+                  "never recorded what it handed the container. The working-area "
+                  "sweep is what keeps a stale report out of this path."
+              )
+          if failed:
+              sys.exit(1)
+          PROVEOF
           problems="$(python3 -c 'import json,sys; print(sum(len(r.get("results",[])) for r in json.load(open(sys.argv[1]))["runs"]))' "$sarif")"
           {
             echo "## Qodana"
@@ -302,6 +1457,35 @@ jobs:
             echo "- Problems reported: $problems"
             echo "- Report: uploaded to Qodana Cloud and to GitHub code scanning"
           } >> "$GITHUB_STEP_SUMMARY"
+
+          # AND THE ANALYSER ACTUALLY SAW THE PROJECT. Everything above proves
+          # the report EXISTS, belongs to this commit, and will be accepted by
+          # code scanning. None of it can tell an empty analysis from a clean
+          # one, and maxi-config#557 was exactly that: a scan whose dependency
+          # graph never resolved, publishing 61 findings -- 45 of them
+          # TomlUnresolvedReference, i.e. the failure itself -- under a green
+          # check, for weeks, with the only evidence two lines in the middle of
+          # the scan log.
+          #
+          # So read those two lines. Both are Rust-specific and neither appears
+          # in a healthy run, so no linter needs to be special-cased here: the
+          # greps simply find nothing in a JS, Python, Go or .NET scan.
+          #
+          # This is deliberately FATAL. A scan that could not resolve is a
+          # broken measurement, and this lane's entire premise -- #526, #544,
+          # #549 and now #557 -- is that a silently empty result is worse than
+          # a red one, because a red one gets fixed.
+          scan_log="$RUNNER_TEMP/qodana/scan.log"
+          if [ -s "$scan_log" ]; then
+            if grep -q 'QODANA_BOOTSTRAP: cargo fetch failed' "$scan_log"; then
+              echo "::error::the Rust bootstrap could not fetch dependencies, so the unresolved references in this report are the scan failing, not the code. See maxi-config#557."
+              exit 1
+            fi
+            if grep -qE 'Analysis scope: 0 packages' "$scan_log"; then
+              echo "::error::Qodana resolved 0 packages: this report measures nothing, whatever its finding count says. See maxi-config#557."
+              exit 1
+            fi
+          fi
 
       # The action's own `upload-result` artifact turned out to contain only
       # log/, no SARIF -- so a failing gate told you THAT there were problems
@@ -330,9 +1514,32 @@ jobs:
         if: always()
         run: rm -rf .qodana
 
+      # NO continue-on-error, and that is a deliberate reversal. It used to
+      # carry one, and this is what that bought: on 2026-09-04
+      #
+      #   gh api "repos/maxi-tools/maxi-core/code-scanning/analyses?per_page=100"
+      #     -> [{"tool":"CodeQL","n":20}]
+      #   gh api ".../code-scanning/analyses?tool_name=Qodana"
+      #     -> []
+      #
+      # Not one Qodana analysis had EVER reached code scanning, while the step
+      # reported green on every run. It was failing on
+      # `Resource not accessible by integration` for want of the `actions: read`
+      # granted above, printing no "successfully uploaded" line, and
+      # continue-on-error turned that permanent misconfiguration into silence.
+      #
+      # This template already argues the general case, at "Require Qodana Cloud
+      # token": "The old workflow made every failure path non-fatal ... so a
+      # scan that produced nothing still reported green. A missing token is a
+      # configuration bug, not a reason to no-op." Delivery to the Security tab
+      # is the point of the scan; a scan whose findings never arrive has not
+      # run, and must say so.
+      #
+      # This adds no failure mode on the scan-died path: `Assert the scan
+      # produced a report` above already fails the job when there is no SARIF
+      # to upload.
       - name: Upload SARIF to GitHub
         if: always() && steps.scan.outcome != 'skipped'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ runner.temp }}/qodana/results/qodana.sarif.json
-        continue-on-error: true
