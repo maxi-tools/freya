@@ -32,7 +32,7 @@ permissions: {}
 
 jobs:
   merge-gate:
-    uses: maxi-tools/maxi-config/.github/workflows/rust-ci.yml@main
+    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@main
     permissions:
       contents: write
       pull-requests: read
