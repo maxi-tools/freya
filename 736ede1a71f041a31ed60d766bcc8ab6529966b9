@@ -1,0 +1,19 @@
+crates/freya-terminal/src/handle.rs
+  s_b23c633ab77d8f::t_ba879b08e90a29 907-938
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "736ede1a71f041a31ed60d766bcc8ab6529966b9",
+  "prompts": {},
+  "sessions": {
+    "s_b23c633ab77d8f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82914612-8485-416c-adc8-f92043a9eaa3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Maxi Boch <874012+maxiboch@users.noreply.github.com>"
+    }
+  }
+}

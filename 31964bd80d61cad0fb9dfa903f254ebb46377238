@@ -1,0 +1,20 @@
+crates/freya-terminal/src/pty.rs
+  s_1e3d43461640b3::t_79b298207f5575 60-79,85-86,93,96-100
+  s_1e3d43461640b3::t_b0f2907f3bb58d 415-447
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "31964bd80d61cad0fb9dfa903f254ebb46377238",
+  "prompts": {},
+  "sessions": {
+    "s_1e3d43461640b3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e37d-e664-4ab9-8157-1cbb6a0dcee9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Maxi Boch <874012+maxiboch@users.noreply.github.com>"
+    }
+  }
+}

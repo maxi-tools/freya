@@ -1,0 +1,28 @@
+crates/freya-terminal/src/fd_pty.rs
+  s_1e3d43461640b3::t_0c972e66df6fcf 166
+  s_1e3d43461640b3::t_449be610487c5b 130
+crates/freya-terminal/src/lib.rs
+  s_1e3d43461640b3::t_f02cb1596eb0b0 80-92
+crates/freya-terminal/Cargo.toml
+  s_1e3d43461640b3::t_3e99d1d7d4aaf4 34,36,40-42
+crates/freya-terminal/src/pty.rs
+  s_1e3d43461640b3::t_0aaaedc6cc1916 383-389
+crates/freya-terminal/src/handle.rs
+  s_1e3d43461640b3::t_f72dab35fd208c 155-159,165,168-171,174,176,179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5d484dfc433b4ca635aad493ac84d7cca4444e70",
+  "prompts": {},
+  "sessions": {
+    "s_1e3d43461640b3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e37d-e664-4ab9-8157-1cbb6a0dcee9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Maxi Boch <874012+maxiboch@users.noreply.github.com>"
+    }
+  }
+}
