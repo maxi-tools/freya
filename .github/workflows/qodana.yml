@@ -1634,8 +1634,85 @@ jobs:
       # This adds no failure mode on the scan-died path: `Assert the scan
       # produced a report` above already fails the job when there is no SARIF
       # to upload.
-      - name: Upload SARIF to GitHub
+      # WHY A PROBE, AND WHY IT IS NOT `continue-on-error`.
+      #
+      # The upload step below is blocking, for the reasons argued above, and it
+      # must stay blocking. But "blocking" has to mean "the delivery this
+      # repository is configured for did not happen", and on 2026-09-11 it
+      # meant something else in nine repositories: qodana-full was red on main
+      # in maxi-firmware-{core,embassy,std}, maxi-action-heptathlon,
+      # maxi-audio, maxi-vector-cloud, maxi-stackchan, maxi-warp-spike and
+      # maxi-warp-bridge, every one of them on
+      #
+      #   Code Security must be enabled for this repository to use code
+      #   scanning. - https://docs.github.com/rest
+      #
+      # after a scan that had completed and produced a report. Those
+      # repositories are private and attached to the org configuration
+      # `Secret Protection enabled` (id 218105), which carries
+      # `advanced_security: secret_protection` and
+      # `code_scanning_default_setup: disabled`. Forty-two repositories in this
+      # org carry it. That is a deliberate posture -- secret scanning yes, paid
+      # code scanning no -- and not something a merge gate gets to overrule by
+      # staying red until somebody buys GHAS for the fleet.
+      #
+      # So the discriminator is the SPECIFIC failure, never the step's exit
+      # code. A 403 whose body is that message means the backend is switched
+      # off on purpose: skip the upload and say so. Any other outcome -- a 403
+      # reading `Resource not accessible by integration`, which is exactly the
+      # permissions bug the comment above was written about, a 401, a 404, a
+      # 5xx, a body this probe cannot read -- exits non-zero and takes the job
+      # with it. Fail closed: the only path to skipping is the one message.
+      #
+      # This is deliberately NOT `continue-on-error` on the upload, and not a
+      # check for an empty analyses list. Both of those turn every delivery
+      # failure into silence, which is the state this template spent
+      # maxi-core#3900 climbing out of.
+      - name: Determine whether code scanning can receive the SARIF
+        id: code_scanning
         if: always() && steps.scan.outcome != 'skipped'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # In $RUNNER_TEMP for consistency with the rest of the workflow's
+          # scratch paths, and with an explicit XXXXXX template so this is the
+          # same call on BSD mktemp as on GNU.
+          body="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/code-scanning-probe.XXXXXX")"
+          trap 'rm -f "$body"' EXIT
+
+          code="$(curl -sS -o "$body" -w '%{http_code}' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/code-scanning/analyses?per_page=1" \
+            || echo '000')"
+
+          case "$code" in
+            200)
+              echo 'available=true' >> "$GITHUB_OUTPUT"
+              echo "code scanning is enabled on ${GITHUB_REPOSITORY}; the upload below is blocking."
+              ;;
+            403)
+              if grep -qF 'Code Security must be enabled for this repository' "$body"; then
+                echo 'available=false' >> "$GITHUB_OUTPUT"
+                echo "::notice::Code scanning is disabled on ${GITHUB_REPOSITORY}, so the SARIF cannot be delivered to the Security tab. The scan itself ran and remains blocking, and the report is attached to this run as the qodana-sarif artifact. Enable Code Security on the repository, or move it off the org's Secret-Protection-only configuration, to restore Security-tab delivery."
+              else
+                echo "::error::Code scanning probe was refused with 403, but not because Code Security is disabled. This is a permissions or configuration fault and is NOT a reason to skip the upload. Response body:"
+                cat "$body"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::Code scanning probe returned HTTP ${code}, which this workflow cannot interpret. Refusing to guess whether the SARIF upload would have worked. Response body:"
+              cat "$body"
+              exit 1
+              ;;
+          esac
+
+      - name: Upload SARIF to GitHub
+        if: always() && steps.scan.outcome != 'skipped' && steps.code_scanning.outputs.available == 'true'
         uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d # v3.37.9
         with:
           sarif_file: ${{ runner.temp }}/qodana/results/qodana.sarif.json
