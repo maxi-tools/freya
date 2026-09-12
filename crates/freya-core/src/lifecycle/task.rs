@@ -2,11 +2,17 @@ use std::{
     cell::RefCell,
     pin::Pin,
     rc::Rc,
-    sync::{Arc, atomic::Ordering},
+    sync::{
+        Arc,
+        atomic::Ordering,
+    },
 };
 
 use crate::{
-    current_context::CurrentContext, prelude::current_scope_id, runner::Message, scope_id::ScopeId,
+    current_context::CurrentContext,
+    prelude::current_scope_id,
+    runner::Message,
+    scope_id::ScopeId,
 };
 
 pub fn spawn_forever(future: impl Future<Output = ()> + 'static) -> TaskHandle {

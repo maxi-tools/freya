@@ -1,17 +1,38 @@
 use freya_core::{
     integration::*,
     prelude::{
-        Border, Color, CornerRadius, CursorMode, Fill, FontSlant, Shadow, TextAlign,
-        TextDecoration, TextHeightBehavior, TextOverflow, TextShadow, VerticalAlign,
+        Border,
+        Color,
+        CornerRadius,
+        CursorMode,
+        Fill,
+        FontSlant,
+        Shadow,
+        TextAlign,
+        TextDecoration,
+        TextHeightBehavior,
+        TextOverflow,
+        TextShadow,
+        VerticalAlign,
     },
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use torin::{
     alignment::Alignment,
     direction::Direction,
     gaps::Gaps,
     geometry::Length,
-    prelude::{Area, AreaOf, Content, Inner, Position, VisibleSize},
+    prelude::{
+        Area,
+        AreaOf,
+        Content,
+        Inner,
+        Position,
+        VisibleSize,
+    },
     size::Size,
 };
 

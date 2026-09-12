@@ -1,22 +1,48 @@
-use std::{cell::RefCell, io::Read, path::PathBuf, rc::Rc, time::Instant};
+use std::{
+    cell::RefCell,
+    io::Read,
+    path::PathBuf,
+    rc::Rc,
+    time::Instant,
+};
 
 use freya_core::{
     notify::ArcNotify,
-    prelude::{Platform, TaskHandle, UserEvent, spawn_forever},
+    prelude::{
+        Platform,
+        TaskHandle,
+        UserEvent,
+        spawn_forever,
+    },
 };
 use futures_lite::AsyncReadExt;
 use keyboard_types::Modifiers;
-use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
+use portable_pty::{
+    CommandBuilder,
+    MasterPty,
+    PtySize,
+    native_pty_system,
+};
 use termwiz::escape::{
-    Action, CSI, OperatingSystemCommand,
-    csi::{Cursor, Device},
+    Action,
+    CSI,
+    OperatingSystemCommand,
+    csi::{
+        Cursor,
+        Device,
+    },
     parser::Parser as TermwizParser,
 };
 use vt100::Parser;
 
 use crate::{
     buffer::TerminalBuffer,
-    handle::{TerminalCleaner, TerminalError, TerminalHandle, TerminalId},
+    handle::{
+        TerminalCleaner,
+        TerminalError,
+        TerminalHandle,
+        TerminalId,
+    },
 };
 
 /// Query the maximum scrollback available without disturbing the viewport.
@@ -406,13 +432,26 @@ pub(crate) fn setup_terminal_from_master(
 
 #[cfg(all(test, unix))]
 mod tests {
-    use std::os::unix::io::{FromRawFd, OwnedFd};
+    use std::os::unix::io::{
+        FromRawFd,
+        OwnedFd,
+    };
 
-    use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
+    use portable_pty::{
+        CommandBuilder,
+        MasterPty,
+        PtySize,
+        native_pty_system,
+    };
 
-    use crate::fd_pty::RawFdMasterPty;
-    use crate::handle::TerminalId;
-    use crate::pty::{attach_spawned_child, reap_in_background};
+    use crate::{
+        fd_pty::RawFdMasterPty,
+        handle::TerminalId,
+        pty::{
+            attach_spawned_child,
+            reap_in_background,
+        },
+    };
 
     #[test]
     fn reap_in_background_reaps_exited_child() {

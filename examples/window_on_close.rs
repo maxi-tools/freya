@@ -2,7 +2,10 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
-use freya::{prelude::*, winit::window::WindowId};
+use freya::{
+    prelude::*,
+    winit::window::WindowId,
+};
 
 fn main() {
     launch(

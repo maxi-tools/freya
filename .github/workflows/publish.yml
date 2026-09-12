@@ -21,10 +21,10 @@ jobs:
           submodules: true
       - name: Remove unused programs
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
       - name: Install linux dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev pkg-config libglib2.0-dev libgtk-3-dev libudev-dev libxdo-dev libwebkit2gtk-4.1-dev
+        uses: ./.github/actions/linux-system-deps
       - name: Install the rust toolchain
         uses: dtolnay/rust-toolchain@1.94
       - run: cargo publish --features skia-engine --workspace --exclude "examples" --exclude "website" --exclude "freya-devtools-app"

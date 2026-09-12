@@ -15,10 +15,32 @@ permissions:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    # `join(matrix.os, '-')`, NOT `matrix.os`. Upstream's matrix was
+    # `[ubuntu-latest, windows-latest, macos-latest]` -- plain strings, one
+    # distinct group each. This fork's matrix legs are LABEL ARRAYS, and an
+    # array interpolated into a string contributes nothing, so all three legs
+    # resolved to the single group `rust-test--main` and `cancel-in-progress`
+    # made each leg kill the two still waiting for a runner.
+    #
+    # Measured on eight consecutive runs before this change: exactly one leg
+    # of three ever ran, the other two were `cancelled` with zero steps and a
+    # one-second duration, and WHICH leg survived varied run to run. That is
+    # why `build (self-hosted, Linux, ARM64)` and
+    # `build (self-hosted, Windows, X64)` read as permanently failing on main
+    # while `build (self-hosted, macOS, ARM64)` read as green -- nothing was
+    # wrong with those two legs at the point they were killed; they simply
+    # lost the race to the leg that got a runner first.
     concurrency:
-      group: rust-test-${{ matrix.os }}-${{ github.ref_name }}
+      group: rust-test-${{ join(matrix.os, '-') }}-${{ github.ref_name }}
       cancel-in-progress: true
     strategy:
+      # One platform's result must not delete the other two. `fail-fast`
+      # defaults to true, so the Windows leg failing on a runner-image gap
+      # (maxi-config#661: neither Windows box has `pwsh`, which
+      # `taiki-e/install-action` requires) cancelled the Linux and macOS legs
+      # mid-run and reported three red checks for one problem on one box.
+      # These legs share nothing; they are three separate answers.
+      fail-fast: false
       matrix:
         os:
           - [self-hosted, Linux, ARM64]
@@ -40,15 +62,14 @@ jobs:
       uses: Swatinem/rust-cache@v2
       if: github.ref != 'refs/heads/main'
       with:
-        shared-key: "rust-${{ matrix.os }}"
+        # Same array-interpolation bug as the concurrency group above: with
+        # `matrix.os` the three legs shared the key "rust-", so a Windows job
+        # could restore a macOS cache.
+        shared-key: "rust-${{ join(matrix.os, '-') }}"
         save-if: ${{ github.ref == 'refs/heads/main' }}
     - name: Install linux dependencies
       if: runner.os == 'Linux'
-      run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev pkg-config libglib2.0-dev libgtk-3-dev libudev-dev libxdo-dev libwebkit2gtk-4.1-dev
-    - name: Remove unused programs in linux
-      if: runner.os == 'Linux'
-      run: |
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      uses: ./.github/actions/linux-system-deps
     - name: Run Linux tests
       if: runner.os == 'Linux'
       run: |
@@ -59,11 +80,29 @@ jobs:
     - name: Run MacOS and Windows tests
       if: runner.os != 'Linux'
       run: just t
+    # grcov's asset is chosen by `uname -m`, not hardcoded to x86_64. The
+    # Linux lane is aarch64, and the x86_64 tarball is not merely the wrong
+    # download -- these boxes have x86_64 binfmt registered without the
+    # matching loader, so it is dispatched to qemu and dies as
+    #
+    #   x86_64-binfmt-P: Could not open '/lib64/ld-linux-x86-64.so.2'
+    #                                                     (exit 255)
+    #
+    # which is the same trap the Android NDK fell into: on this hardware an
+    # x86_64 binary looks runnable right up until it is run. Everything before
+    # this step passed -- `just t` ran the whole Linux suite green -- so the
+    # only thing this was costing was the coverage upload.
     - name: Run coverage
       if: runner.os == 'Linux'
       run: |
+        set -euo pipefail
         rustup component add llvm-tools-preview
-        curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-x86_64-unknown-linux-gnu.tar.bz2 | tar jxf -
+        case "$(uname -m)" in
+          x86_64)          grcov_target=x86_64-unknown-linux-gnu ;;
+          aarch64|arm64)   grcov_target=aarch64-unknown-linux-gnu ;;
+          *) echo "::error::No grcov release asset for $(uname -m)."; exit 1 ;;
+        esac
+        curl -fsSL "https://github.com/mozilla/grcov/releases/latest/download/grcov-${grcov_target}.tar.bz2" | tar jxf -
         ./grcov . --binary-path ./target/debug/deps -s . -t lcov --branch --ignore-not-existing --ignore "../*" --ignore "/*" -o cov.lcov
     - uses: codecov/codecov-action@v6
       if: runner.os == 'Linux'

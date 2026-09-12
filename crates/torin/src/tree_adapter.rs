@@ -1,11 +1,21 @@
-use std::{any::Any, rc::Rc};
+use std::{
+    any::Any,
+    rc::Rc,
+};
 
 pub use euclid::Rect;
 
 use crate::{
     geometry::Area,
     node::Node,
-    prelude::{AreaModel, AreaOf, Gaps, Inner, Length, Size2D},
+    prelude::{
+        AreaModel,
+        AreaOf,
+        Gaps,
+        Inner,
+        Length,
+        Size2D,
+    },
 };
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

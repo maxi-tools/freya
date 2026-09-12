@@ -1,17 +1,37 @@
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{format_ident, quote};
+use quote::{
+    format_ident,
+    quote,
+};
 use syn::{
-    Field, Ident, LitStr, Path, Type,
-    parse::{Parse, ParseStream},
+    Field,
+    Ident,
+    LitStr,
+    Path,
+    Type,
+    parse::{
+        Parse,
+        ParseStream,
+    },
     parse_quote,
 };
 
 use crate::{
     hash::HashFragment,
-    layout::{Layout, LayoutId},
-    nest::{Nest, NestId},
+    layout::{
+        Layout,
+        LayoutId,
+    },
+    nest::{
+        Nest,
+        NestId,
+    },
     query::QuerySegment,
-    segment::{RouteSegment, create_error_type, parse_route_segments},
+    segment::{
+        RouteSegment,
+        create_error_type,
+        parse_route_segments,
+    },
 };
 
 struct RouteArgs {

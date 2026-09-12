@@ -7,10 +7,16 @@ on:
         description: "OS"
         required: true
         type: choice
+        # JSON strings, not YAML sequences. A `workflow_dispatch` choice
+        # option must be a scalar, so the three label arrays this file grew
+        # during the move to self-hosted runners each collapsed to the empty
+        # string -- an input offering the same blank option three times, and
+        # a `runs-on` that selected nothing. `fromJSON` below turns the
+        # chosen string back into the label list.
         options:
-          - [self-hosted, macOS, ARM64]
-          - [self-hosted, Linux, ARM64]
-          - [self-hosted, Windows, X64]
+          - '["self-hosted", "macOS", "ARM64"]'
+          - '["self-hosted", "Linux", "ARM64"]'
+          - '["self-hosted", "Windows", "X64"]'
       example_name:
         description: "Example name"
         required: true
@@ -20,12 +26,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-    if: ${{ always() }}
-    strategy:
-      matrix:
-        os: ["${{ inputs.os }}"]
-      fail-fast: true
+    # A one-entry matrix existed only to smuggle the input into `runs-on`,
+    # which can read `inputs` directly on a workflow_dispatch.
+    runs-on: ${{ fromJSON(inputs.os) }}
 
     steps:
       - uses: actions/checkout@v6
@@ -34,8 +37,7 @@ jobs:
 
       - name: Install linux dependencies
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update && sudo apt-get install -y build-essential libssl-dev pkg-config libglib2.0-dev libgtk-3-dev libudev-dev libxdo-dev libwebkit2gtk-4.1-dev
+        uses: ./.github/actions/linux-system-deps
 
       - name: Build example
         run: cargo build --example ${{inputs.example_name}} --release

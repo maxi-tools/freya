@@ -1,17 +1,41 @@
-use accesskit::{Action, Node, Rect, Role, TreeId, TreeUpdate};
+use accesskit::{
+    Action,
+    Node,
+    Rect,
+    Role,
+    TreeId,
+    TreeUpdate,
+};
 use ragnarok::ProcessedEvents;
-use rustc_hash::{FxHashMap, FxHashSet};
-use torin::prelude::{CursorPoint, LayoutNode};
+use rustc_hash::{
+    FxHashMap,
+    FxHashSet,
+};
+use torin::prelude::{
+    CursorPoint,
+    LayoutNode,
+};
 
 use crate::{
     accessibility::{
-        focus_strategy::AccessibilityFocusStrategy, focusable::Focusable, id::AccessibilityId,
+        focus_strategy::AccessibilityFocusStrategy,
+        focusable::Focusable,
+        id::AccessibilityId,
     },
     elements::label::Label,
     events::emittable::EmmitableEvent,
-    integration::{EventName, EventsChunk},
+    integration::{
+        EventName,
+        EventsChunk,
+    },
     node_id::NodeId,
-    prelude::{AccessibilityFocusMovement, EventType, Paragraph, WheelEventData, WheelSource},
+    prelude::{
+        AccessibilityFocusMovement,
+        EventType,
+        Paragraph,
+        WheelEventData,
+        WheelSource,
+    },
     tree::Tree,
 };
 

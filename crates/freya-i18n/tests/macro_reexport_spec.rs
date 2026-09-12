@@ -3,11 +3,18 @@
 
 mod reexport_test {
     // Re-export the macros as if from another crate
-    pub use freya_i18n::{t, te, tid};
+    pub use freya_i18n::{
+        t,
+        te,
+        tid,
+    };
 }
 
 use freya::prelude::*;
-use freya_i18n::prelude::{I18nConfig, use_init_i18n};
+use freya_i18n::prelude::{
+    I18nConfig,
+    use_init_i18n,
+};
 use freya_testing::prelude::*;
 use unic_langid::langid;
 

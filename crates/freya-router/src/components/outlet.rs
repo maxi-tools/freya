@@ -2,7 +2,10 @@ use std::marker::PhantomData;
 
 use freya_core::prelude::*;
 
-use crate::prelude::{outlet::OutletContext, *};
+use crate::prelude::{
+    outlet::OutletContext,
+    *,
+};
 
 pub struct Outlet<R>(PhantomData<R>);
 

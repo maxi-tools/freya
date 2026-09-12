@@ -1,7 +1,10 @@
 use freya::prelude::*;
 use freya_core::{
     prelude::Border,
-    style::{color::Color, text_shadow::TextShadow},
+    style::{
+        color::Color,
+        text_shadow::TextShadow,
+    },
 };
 
 const NAME_COLOR: (u8, u8, u8) = (102, 163, 217);

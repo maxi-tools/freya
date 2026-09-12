@@ -1,6 +1,14 @@
-use freya_core::prelude::{Element, provide_context, try_consume_context, use_hook};
+use freya_core::prelude::{
+    Element,
+    provide_context,
+    try_consume_context,
+    use_hook,
+};
 
-use crate::{routable::Routable, utils::use_router_internal::use_router_internal};
+use crate::{
+    routable::Routable,
+    utils::use_router_internal::use_router_internal,
+};
 
 /// A context that manages nested routing levels for outlet components.
 ///

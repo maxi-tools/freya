@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use freya::{helpers::*, prelude::*};
+use freya::{
+    helpers::*,
+    prelude::*,
+};
 use freya_edit::*;
 use freya_testing::prelude::*;
 

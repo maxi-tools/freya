@@ -1,4 +1,9 @@
-use jni::{JValue, jni_sig, jni_str, objects::JObject};
+use jni::{
+    JValue,
+    jni_sig,
+    jni_str,
+    objects::JObject,
+};
 use winit::platform::android::activity::AndroidApp;
 
 /// Show the Android soft keyboard.

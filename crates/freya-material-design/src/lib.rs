@@ -24,5 +24,12 @@ pub mod sidebar;
 pub mod tile;
 
 pub mod prelude {
-    pub use crate::{button::*, floating_tab::*, menu::*, ripple::*, sidebar::*, tile::*};
+    pub use crate::{
+        button::*,
+        floating_tab::*,
+        menu::*,
+        ripple::*,
+        sidebar::*,
+        tile::*,
+    };
 }

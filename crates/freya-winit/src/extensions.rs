@@ -1,16 +1,27 @@
 use freya_core::{
     elements::rect::Rect,
     prelude::{
-        Event, EventHandlersExt, EventsCombos, Platform, PointerEventData, PressEventType,
+        Event,
+        EventHandlersExt,
+        EventsCombos,
+        Platform,
+        PointerEventData,
+        PressEventType,
         UserEvent,
     },
     user_event::SingleThreadErasedEvent,
 };
-use winit::window::{Window, WindowId};
+use winit::window::{
+    Window,
+    WindowId,
+};
 
 use crate::{
     config::WindowConfig,
-    renderer::{NativeWindowErasedEventAction, WithWindowCallback},
+    renderer::{
+        NativeWindowErasedEventAction,
+        WithWindowCallback,
+    },
 };
 
 /// Extension trait that adds winit-specific window management capabilities to [`Platform`].

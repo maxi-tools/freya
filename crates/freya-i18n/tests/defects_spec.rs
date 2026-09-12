@@ -1,9 +1,16 @@
 use freya_i18n::{
-    prelude::{I18n, I18nConfig, use_init_i18n},
+    prelude::{
+        I18n,
+        I18nConfig,
+        use_init_i18n,
+    },
     t,
 };
 use freya_testing::prelude::*;
-use unic_langid::{LanguageIdentifier, langid};
+use unic_langid::{
+    LanguageIdentifier,
+    langid,
+};
 
 #[test]
 fn issue_15_recent_change_to_t_macro_unnecessarily_breaks_v0_3_code_test_attr() {

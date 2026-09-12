@@ -1,6 +1,14 @@
-use std::{any::Any, rc::Rc};
+use std::{
+    any::Any,
+    rc::Rc,
+};
 
-use crate::{geometry::Size2D, node::Node, prelude::Area, tree_adapter::NodeKey};
+use crate::{
+    geometry::Size2D,
+    node::Node,
+    prelude::Area,
+    tree_adapter::NodeKey,
+};
 
 pub trait LayoutMeasurer<Key: NodeKey> {
     fn measure(

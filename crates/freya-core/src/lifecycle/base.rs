@@ -1,6 +1,10 @@
 use std::rc::Rc;
 
-use crate::{current_context::CurrentContext, runner::Message, scope_id::ScopeId};
+use crate::{
+    current_context::CurrentContext,
+    runner::Message,
+    scope_id::ScopeId,
+};
 
 static HOOKS_ERROR: &str = "
 Hook functions must follow these rules:

@@ -22,8 +22,23 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.94
       - name: Install just
         uses: taiki-e/install-action@just
+      # `$CARGO_HOME/bin` on PATH, because nothing else puts it there. A
+      # GitHub-hosted image ships `~/.cargo/bin` already on PATH, so
+      # `cargo install`ing a standalone binary and then calling it by name
+      # just works; on these boxes CARGO_HOME is `/data/ci/<runner>/.cargo`
+      # and it does not. The job profiled both revisions in both modes and
+      # then died on the last two steps with
+      #
+      #   hotpath-utils: command not found     (exit 127)
+      #
+      # -- all four measurements taken, none reported. cargo subcommands are
+      # unaffected (cargo finds its own bin dir), which is why
+      # `cargo install cargo-ndk` elsewhere never showed this.
       - name: Install hotpath-utils CLI
-        run: cargo install hotpath --version '^0.14' --bin hotpath-utils --features=utils
+        run: |
+          set -euo pipefail
+          cargo install hotpath --version '^0.14' --bin hotpath-utils --features=utils
+          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> "$GITHUB_PATH"
       - name: Set up cargo cache
         uses: Swatinem/rust-cache@v2
         if: github.ref != 'refs/heads/main'
@@ -32,8 +47,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install linux dependencies
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update && sudo apt-get install -y build-essential libssl-dev pkg-config libglib2.0-dev libgtk-3-dev libudev-dev libxdo-dev libwebkit2gtk-4.1-dev
+        uses: ./.github/actions/linux-system-deps
       - name: Create metrics directory
         run: mkdir -p /tmp/metrics
       - name: Head timing metrics

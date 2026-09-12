@@ -1,11 +1,23 @@
-use std::{fmt::Display, ops::Range};
+use std::{
+    fmt::Display,
+    ops::Range,
+};
 
-use ropey::{Rope, iter::Lines};
+use ropey::{
+    Rope,
+    iter::Lines,
+};
 
 use crate::{
     TextSelection,
-    editor_history::{EditorHistory, HistoryChange},
-    text_editor::{Line, TextEditor},
+    editor_history::{
+        EditorHistory,
+        HistoryChange,
+    },
+    text_editor::{
+        Line,
+        TextEditor,
+    },
 };
 
 /// Tracks the position and length of IME preedit text within the rope.
@@ -341,7 +353,11 @@ mod test {
     use std::time::Duration;
 
     use super::RopeEditor;
-    use crate::{EditorHistory, TextSelection, text_editor::TextEditor};
+    use crate::{
+        EditorHistory,
+        TextSelection,
+        text_editor::TextEditor,
+    };
 
     fn editor(text: &str) -> RopeEditor {
         RopeEditor::new(
