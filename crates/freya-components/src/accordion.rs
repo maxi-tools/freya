@@ -1,8 +1,19 @@
-use freya_animation::prelude::{AnimNum, Ease, Function, use_animation};
+use freya_animation::prelude::{
+    AnimNum,
+    Ease,
+    Function,
+    use_animation,
+};
 use freya_core::prelude::*;
-use torin::{gaps::Gaps, prelude::VisibleSize};
+use torin::{
+    gaps::Gaps,
+    prelude::VisibleSize,
+};
 
-use crate::{define_theme, get_theme};
+use crate::{
+    define_theme,
+    get_theme,
+};
 
 define_theme! {
     %[component]

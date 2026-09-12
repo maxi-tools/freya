@@ -4,14 +4,24 @@
 )]
 
 #[cfg(target_os = "linux")]
-use std::{env, path::PathBuf, process::Command};
+use std::{
+    env,
+    path::PathBuf,
+    process::Command,
+};
 
 #[cfg(target_os = "linux")]
-use freya::winit::platform::x11::{WindowAttributesExtX11, WindowType};
+use freya::winit::platform::x11::{
+    WindowAttributesExtX11,
+    WindowType,
+};
 #[cfg(target_os = "linux")]
 use freya::{
     prelude::*,
-    winit::{dpi::LogicalPosition, window::WindowLevel},
+    winit::{
+        dpi::LogicalPosition,
+        window::WindowLevel,
+    },
 };
 
 #[cfg(target_os = "linux")]

@@ -1,14 +1,30 @@
-use std::{ops::Range, time::Duration};
+use std::{
+    ops::Range,
+    time::Duration,
+};
 
 use freya_core::prelude::*;
 use freya_sdk::timeout::use_timeout;
-use torin::{geometry::CursorPoint, node::Node, prelude::Direction, size::Size};
+use torin::{
+    geometry::CursorPoint,
+    node::Node,
+    prelude::Direction,
+    size::Size,
+};
 
 use crate::scrollviews::{
-    ScrollBar, ScrollConfig, ScrollController, ScrollThumb,
+    ScrollBar,
+    ScrollConfig,
+    ScrollController,
+    ScrollThumb,
     shared::{
-        Axis, get_container_sizes, get_corrected_scroll_position, get_scroll_position_from_cursor,
-        get_scroll_position_from_wheel, get_scrollbar_pos_and_size, handle_key_event,
+        Axis,
+        get_container_sizes,
+        get_corrected_scroll_position,
+        get_scroll_position_from_cursor,
+        get_scroll_position_from_wheel,
+        get_scrollbar_pos_and_size,
+        handle_key_event,
         is_scrollbar_visible,
     },
     use_scroll_controller,

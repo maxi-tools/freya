@@ -87,11 +87,22 @@
 
 pub mod prelude {
     pub use freya_core::prelude::*;
-    pub use freya_edit::{Clipboard, ClipboardError};
+    pub use freya_edit::{
+        Clipboard,
+        ClipboardError,
+    };
     pub use freya_winit::{
-        WindowDragExt, WinitPlatformExt,
-        config::{CloseDecision, LaunchConfig, WindowConfig},
-        renderer::{NativeEvent, RendererContext},
+        WindowDragExt,
+        WinitPlatformExt,
+        config::{
+            CloseDecision,
+            LaunchConfig,
+            WindowConfig,
+        },
+        renderer::{
+            NativeEvent,
+            RendererContext,
+        },
     };
 
     pub use crate::components::*;
@@ -113,7 +124,11 @@ pub mod prelude {
         content::Content,
         direction::Direction,
         gaps::Gaps,
-        geometry::{Area, CursorPoint, Size2D},
+        geometry::{
+            Area,
+            CursorPoint,
+            Size2D,
+        },
         position::Position,
         size::Size,
         visible_size::VisibleSize,
@@ -164,8 +179,12 @@ pub mod components {
         draggable_canvas::*,
         element_expansions::*,
         floating_tab::*,
-        gallery, get_theme,
-        icons::{arrow::*, tick::*},
+        gallery,
+        get_theme,
+        icons::{
+            arrow::*,
+            tick::*,
+        },
         image_viewer::*,
         input::*,
         loader::*,
@@ -185,7 +204,10 @@ pub mod components {
         switch::*,
         table::*,
         theming::{
-            component_themes::{ColorsSheet, Theme},
+            component_themes::{
+                ColorsSheet,
+                Theme,
+            },
             extensions::*,
             hooks::*,
             macros::Preference,

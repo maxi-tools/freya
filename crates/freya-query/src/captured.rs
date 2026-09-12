@@ -1,6 +1,9 @@
 use std::{
     hash::Hash,
-    ops::{Deref, DerefMut},
+    ops::{
+        Deref,
+        DerefMut,
+    },
 };
 
 /// Capture values to use later inside Queries or Mutations, but with a catch, if the capture value changes the mutation will not recapture it because

@@ -1,7 +1,14 @@
 use freya_core::prelude::*;
-use torin::{gaps::Gaps, size::Size};
+use torin::{
+    gaps::Gaps,
+    size::Size,
+};
 
-use crate::{activable_route_context::use_activable_route, define_theme, get_theme};
+use crate::{
+    activable_route_context::use_activable_route,
+    define_theme,
+    get_theme,
+};
 
 define_theme! {
     %[component]

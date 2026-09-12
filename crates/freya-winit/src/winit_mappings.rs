@@ -1,6 +1,16 @@
-use freya_core::prelude::{Force, MouseButton, TouchPhase};
-use keyboard_types::{Code, NamedKey};
-pub use keyboard_types::{Key, Modifiers};
+use freya_core::prelude::{
+    Force,
+    MouseButton,
+    TouchPhase,
+};
+use keyboard_types::{
+    Code,
+    NamedKey,
+};
+pub use keyboard_types::{
+    Key,
+    Modifiers,
+};
 
 pub fn map_winit_mouse_button(event: winit::event::MouseButton) -> MouseButton {
     match event {

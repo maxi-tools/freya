@@ -1,4 +1,7 @@
-use std::ops::{Deref, DerefMut};
+use std::ops::{
+    Deref,
+    DerefMut,
+};
 
 use accesskit::NodeId as AccessibilityId;
 use rustc_hash::FxHashMap;

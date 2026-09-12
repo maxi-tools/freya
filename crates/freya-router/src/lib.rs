@@ -75,9 +75,16 @@ pub mod components {
 
 mod contexts {
     pub(crate) mod outlet;
-    pub use outlet::{OutletContext, use_outlet_context};
+    pub use outlet::{
+        OutletContext,
+        use_outlet_context,
+    };
     pub(crate) mod router;
-    pub use router::{GenericRouterContext, ParseRouteError, RouterContext};
+    pub use router::{
+        GenericRouterContext,
+        ParseRouteError,
+        RouterContext,
+    };
 }
 
 mod router_cfg;
@@ -93,7 +100,11 @@ pub mod prelude {
     pub use freya_router_macro::Routable;
 
     pub use crate::{
-        components::{Outlet, Router, use_share_router},
+        components::{
+            Outlet,
+            Router,
+            use_share_router,
+        },
         contexts::*,
         hooks::*,
         memory::MemoryHistory,

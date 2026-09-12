@@ -2,7 +2,10 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
-use freya::{animation::*, prelude::*};
+use freya::{
+    animation::*,
+    prelude::*,
+};
 
 #[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [90, 95, 99]))]
 fn main() {

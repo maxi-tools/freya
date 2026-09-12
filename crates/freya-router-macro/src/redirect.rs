@@ -1,12 +1,22 @@
-use proc_macro2::{Ident, TokenStream};
-use quote::{format_ident, quote};
+use proc_macro2::{
+    Ident,
+    TokenStream,
+};
+use quote::{
+    format_ident,
+    quote,
+};
 use syn::LitStr;
 
 use crate::{
     hash::HashFragment,
     nest::NestId,
     query::QuerySegment,
-    segment::{RouteSegment, create_error_type, parse_route_segments},
+    segment::{
+        RouteSegment,
+        create_error_type,
+        parse_route_segments,
+    },
 };
 
 #[derive(Debug)]

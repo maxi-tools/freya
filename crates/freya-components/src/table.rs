@@ -1,7 +1,16 @@
 use freya_core::prelude::*;
-use torin::{content::Content, gaps::Gaps, prelude::Alignment, size::Size};
+use torin::{
+    content::Content,
+    gaps::Gaps,
+    prelude::Alignment,
+    size::Size,
+};
 
-use crate::{define_theme, get_theme, icons::arrow::ArrowIcon};
+use crate::{
+    define_theme,
+    get_theme,
+    icons::arrow::ArrowIcon,
+};
 
 define_theme! {
     %[component]

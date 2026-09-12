@@ -3,9 +3,15 @@
     windows_subsystem = "windows"
 )]
 
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
-use freya::{prelude::*, query::*};
+use freya::{
+    prelude::*,
+    query::*,
+};
 use rusqlite::Connection;
 
 #[derive(Clone, Debug)]

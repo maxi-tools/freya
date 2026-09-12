@@ -1,8 +1,16 @@
-use std::{mem::MaybeUninit, ops::Deref};
+use std::{
+    mem::MaybeUninit,
+    ops::Deref,
+};
 
 use crate::{
     lifecycle::writable_utils::WritableUtils,
-    prelude::{ReadRef, State, spawn, use_hook},
+    prelude::{
+        ReadRef,
+        State,
+        spawn,
+        use_hook,
+    },
     reactive_context::ReactiveContext,
 };
 

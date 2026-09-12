@@ -10,6 +10,9 @@ pub use editor_history::*;
 pub use event::*;
 pub use freya_clipboard::prelude::*;
 pub use rope_editor::*;
-pub use ropey::{Rope, RopeSlice};
+pub use ropey::{
+    Rope,
+    RopeSlice,
+};
 pub use text_editor::*;
 pub use use_editable::*;

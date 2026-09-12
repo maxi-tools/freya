@@ -1,7 +1,11 @@
 use freya_core::prelude::*;
 
 use crate::{
-    prelude::{Outlet, OutletContext, RouterContext},
+    prelude::{
+        Outlet,
+        OutletContext,
+        RouterContext,
+    },
     routable::Routable,
     router_cfg::RouterConfig,
 };

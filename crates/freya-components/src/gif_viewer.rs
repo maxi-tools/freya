@@ -1,9 +1,15 @@
 use std::{
     any::Any,
     borrow::Cow,
-    collections::{HashMap, hash_map::DefaultHasher},
+    collections::{
+        HashMap,
+        hash_map::DefaultHasher,
+    },
     fs,
-    hash::{Hash, Hasher},
+    hash::{
+        Hash,
+        Hasher,
+    },
     path::PathBuf,
     rc::Rc,
     time::Duration,
@@ -14,20 +20,42 @@ use async_io::Timer;
 use blocking::unblock;
 use bytes::Bytes;
 use freya_core::{
-    elements::image::{AspectRatio, ImageData, SamplingMode},
+    elements::image::{
+        AspectRatio,
+        ImageData,
+        SamplingMode,
+    },
     integration::*,
     prelude::*,
 };
 use freya_engine::prelude::{
-    AlphaType, ClipOp, Color, ColorType, CubicResampler, Data, FilterMode, ISize, ImageInfo,
-    MipmapMode, Paint, Rect, SamplingOptions, SkImage, SkRect, raster_from_data, raster_n32_premul,
+    AlphaType,
+    ClipOp,
+    Color,
+    ColorType,
+    CubicResampler,
+    Data,
+    FilterMode,
+    ISize,
+    ImageInfo,
+    MipmapMode,
+    Paint,
+    Rect,
+    SamplingOptions,
+    SkImage,
+    SkRect,
+    raster_from_data,
+    raster_n32_premul,
 };
 use gif::DisposalMethod;
 use torin::prelude::Size2D;
 #[cfg(feature = "remote-asset")]
 use ureq::http::Uri;
 
-use crate::{cache::*, loader::CircularLoader};
+use crate::{
+    cache::*,
+    loader::CircularLoader,
+};
 
 /// ### URI
 ///

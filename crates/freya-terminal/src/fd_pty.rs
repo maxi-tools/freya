@@ -6,14 +6,25 @@
 use std::{
     cell::RefCell,
     fs::File,
-    io::{Read, Write},
+    io::{
+        Read,
+        Write,
+    },
     mem,
-    os::unix::io::{AsRawFd, FromRawFd, OwnedFd, RawFd},
+    os::unix::io::{
+        AsRawFd,
+        FromRawFd,
+        OwnedFd,
+        RawFd,
+    },
     path::PathBuf,
 };
 
 use anyhow::bail;
-use portable_pty::{MasterPty, PtySize};
+use portable_pty::{
+    MasterPty,
+    PtySize,
+};
 
 #[cfg(test)]
 pub(crate) static FORCE_DUP_FAIL: std::sync::atomic::AtomicBool =
@@ -171,11 +182,24 @@ impl MasterPty for RawFdMasterPty {
 
 #[cfg(test)]
 mod tests {
-    use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
+    use std::os::unix::io::{
+        AsRawFd,
+        FromRawFd,
+        OwnedFd,
+    };
 
-    use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
+    use portable_pty::{
+        CommandBuilder,
+        MasterPty,
+        PtySize,
+        native_pty_system,
+    };
 
-    use crate::fd_pty::{FORCE_DUP_FAIL, RawFdMasterPty, dup_fd};
+    use crate::fd_pty::{
+        FORCE_DUP_FAIL,
+        RawFdMasterPty,
+        dup_fd,
+    };
 
     #[test]
     fn dup_fd_sets_cloexec() {

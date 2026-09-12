@@ -1,27 +1,55 @@
 use std::{
-    cell::{Ref, RefCell},
+    cell::{
+        Ref,
+        RefCell,
+    },
     io::Write,
     path::PathBuf,
     rc::Rc,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::atomic::{
+        AtomicUsize,
+        Ordering,
+    },
     time::Instant,
 };
 
 use freya_core::{
     notify::ArcNotify,
-    prelude::{Platform, TaskHandle, UserEvent},
+    prelude::{
+        Platform,
+        TaskHandle,
+        UserEvent,
+    },
 };
-use keyboard_types::{Key, Modifiers, NamedKey};
-use portable_pty::{MasterPty, PtySize};
+use keyboard_types::{
+    Key,
+    Modifiers,
+    NamedKey,
+};
+use portable_pty::{
+    MasterPty,
+    PtySize,
+};
 use vt100::Parser;
 
 use crate::{
-    buffer::{TerminalBuffer, TerminalSelection},
+    buffer::{
+        TerminalBuffer,
+        TerminalSelection,
+    },
     parser::{
-        TerminalMouseButton, encode_mouse_move, encode_mouse_press, encode_mouse_release,
+        TerminalMouseButton,
+        encode_mouse_move,
+        encode_mouse_press,
+        encode_mouse_release,
         encode_wheel_event,
     },
-    pty::{extract_buffer, query_max_scrollback, setup_terminal_from_master, spawn_pty},
+    pty::{
+        extract_buffer,
+        query_max_scrollback,
+        setup_terminal_from_master,
+        spawn_pty,
+    },
 };
 
 /// Unique identifier for a terminal instance
@@ -168,8 +196,13 @@ impl TerminalHandle {
     /// # Example
     ///
     /// ```rust,no_run
+    /// use std::os::unix::io::{
+    ///     FromRawFd,
+    ///     OwnedFd,
+    ///     RawFd,
+    /// };
+    ///
     /// use freya_terminal::prelude::*;
-    /// use std::os::unix::io::{FromRawFd, OwnedFd, RawFd};
     ///
     /// let fd: RawFd = 42; // obtained from daemon
     /// // SAFETY: `fd` is a valid, open pty master descriptor that the daemon

@@ -1,4 +1,7 @@
-use crate::{prelude::*, utils::use_router_internal::use_router_internal};
+use crate::{
+    prelude::*,
+    utils::use_router_internal::use_router_internal,
+};
 
 #[must_use]
 pub fn use_route<R: Routable + Clone>() -> R {

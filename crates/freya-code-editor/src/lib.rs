@@ -11,16 +11,29 @@ pub mod prelude {
     pub use ropey::Rope;
 
     pub use crate::{
-        constants::{BASE_FONT_SIZE, MAX_FONT_SIZE},
+        constants::{
+            BASE_FONT_SIZE,
+            MAX_FONT_SIZE,
+        },
         editor_data::CodeEditorData,
         editor_line::EditorLineUI,
-        editor_theme::{DEFAULT_EDITOR_THEME, DEFAULT_SYNTAX_THEME, EditorTheme, SyntaxTheme},
+        editor_theme::{
+            DEFAULT_EDITOR_THEME,
+            DEFAULT_SYNTAX_THEME,
+            EditorTheme,
+            SyntaxTheme,
+        },
         editor_ui::CodeEditor,
         languages::LanguageId,
         metrics::EditorMetrics,
         syntax::{
-            InputEditExt, RopeChunkIter, RopeTextProvider, SyntaxBlocks, SyntaxHighlighter,
-            SyntaxLine, TextNode,
+            InputEditExt,
+            RopeChunkIter,
+            RopeTextProvider,
+            SyntaxBlocks,
+            SyntaxHighlighter,
+            SyntaxLine,
+            TextNode,
         },
     };
 }

@@ -1,29 +1,55 @@
 use std::{
     borrow::Cow,
     hash::Hash,
-    ops::{Deref, DerefMut},
+    ops::{
+        Deref,
+        DerefMut,
+    },
     rc::Rc,
 };
 
-use torin::{prelude::Area, torin::Torin};
+use torin::{
+    prelude::Area,
+    torin::Torin,
+};
 
 use crate::{
     accessibility::{
         dirty_nodes::AccessibilityDirtyNodes,
         focusable::Focusable,
         groups::AccessibilityGroups,
-        id::{AccessibilityGenerator, AccessibilityId},
+        id::{
+            AccessibilityGenerator,
+            AccessibilityId,
+        },
         tree::ACCESSIBILITY_ROOT_ID,
     },
     element::ElementExt,
-    layers::{Layer, Layers},
+    layers::{
+        Layer,
+        Layers,
+    },
     node_id::NodeId,
-    prelude::{AccessibilityFocusStrategy, CursorStyle},
+    prelude::{
+        AccessibilityFocusStrategy,
+        CursorStyle,
+    },
     style::{
-        border::Border, color::Color, corner_radius::CornerRadius, fill::Fill, font_size::FontSize,
-        font_slant::FontSlant, font_weight::FontWeight, font_width::FontWidth, scale::Scale,
-        shadow::Shadow, text_align::TextAlign, text_decoration::TextDecoration,
-        text_height::TextHeightBehavior, text_overflow::TextOverflow, text_shadow::TextShadow,
+        border::Border,
+        color::Color,
+        corner_radius::CornerRadius,
+        fill::Fill,
+        font_size::FontSize,
+        font_slant::FontSlant,
+        font_weight::FontWeight,
+        font_width::FontWidth,
+        scale::Scale,
+        shadow::Shadow,
+        text_align::TextAlign,
+        text_decoration::TextDecoration,
+        text_height::TextHeightBehavior,
+        text_overflow::TextOverflow,
+        text_shadow::TextShadow,
     },
 };
 
