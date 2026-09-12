@@ -776,14 +776,50 @@ jobs:
           image="${image#\'}"
           image="${image%\'}"
 
-          # The tag a short name is given. 2026.1-eap is what maxi-config's own
-          # qodana.yaml pins and what maxi-core#3901 verified end to end on this
-          # fleet -- image resolved, container started ("Qodana for Rust 2026.1
-          # EAP, build QDRST-261.25885"), scan completed. Every linter family in
-          # ci/qodana-bootstrap.toml publishes this tag (rust, python, js,
-          # dotnet, go), so it is not a Rust-only assumption, though every one of
-          # the 51 repos above is in fact qodana-rust.
-          default_tag='2026.1-eap'
+          # The tag a short name is given.
+          #
+          # MOVED FROM 2026.1-eap ON 2026-09-12, and the reason is measurement,
+          # not freshness. Under 2026.1-eap the Rust plugin could not finish
+          # build-script evaluation on a large workspace and reported, as
+          # SEVERE:
+          #
+          #   Some Cargo projects failed to load:
+          #     - maxi:
+          #         - Workspace:    ok
+          #         - Std. library: ok
+          #         - Compiler:     ok
+          #         - Build script: failed (Build script evaluation failed)
+          #
+          # Without build-script output the plugin loses cfg flags, OUT_DIR
+          # code and proc-macro expansion, and its resolution collapses -- so it
+          # reports its own broken inference as defects in the repository:
+          # `Variable `None` is never used` where the source says `None => ...`,
+          # `Method `then_some` is private [E0624]` on a std method,
+          # ``expected `&char`, but found `&str``` on `str::find`.
+          #
+          # Three full scans of maxi-core, same commit, same runner pool
+          # (2026-09-12):
+          #
+          #   2026.1-eap, stock image            1392 pkgs, build script FAILED,
+          #                                      2019 problems, NEW 816, sanity 42
+          #   2026.1-eap + openssl/libclang      1392 pkgs, build script FAILED,
+          #     added to the container           2024 problems, NEW 821, sanity 41
+          #   2026.2-eap, stock image            1420 pkgs, build script OK,
+          #                                      2166 problems, NEW  91, sanity 28
+          #
+          # Runs 34673963861, 34676306870 and 34676795377. Supplying the missing
+          # native build dependencies was tried FIRST and did not help -- the
+          # graph still failed to load -- so the container is left alone and only
+          # the tag moves. NEW is the number the `any: 0` gate reads: 816 -> 91,
+          # and the residue is ordinary findings (48 unnecessary path prefixes,
+          # 12 unused imports, 7 unnecessary casts) rather than unresolved-symbol
+          # noise.
+          #
+          # Verified for every family in ci/qodana-bootstrap.toml before bumping,
+          # because this tag is not Rust-only: jetbrains/qodana-{rust,python,js,
+          # dotnet,go} all publish 2026.2-eap. Rust is the one that publishes
+          # ONLY -eap tags, which is why the fleet default keeps that suffix.
+          default_tag='2026.2-eap'
 
           # Normalise, never rewrite. A value that already names a repository or
           # already carries a tag or digest is left exactly as written, so an
