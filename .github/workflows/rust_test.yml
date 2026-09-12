@@ -34,6 +34,13 @@ jobs:
       group: rust-test-${{ join(matrix.os, '-') }}-${{ github.ref_name }}
       cancel-in-progress: true
     strategy:
+      # One platform's result must not delete the other two. `fail-fast`
+      # defaults to true, so the Windows leg failing on a runner-image gap
+      # (maxi-config#661: neither Windows box has `pwsh`, which
+      # `taiki-e/install-action` requires) cancelled the Linux and macOS legs
+      # mid-run and reported three red checks for one problem on one box.
+      # These legs share nothing; they are three separate answers.
+      fail-fast: false
       matrix:
         os:
           - [self-hosted, Linux, ARM64]
