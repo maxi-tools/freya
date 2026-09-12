@@ -15,8 +15,23 @@ permissions:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    # `join(matrix.os, '-')`, NOT `matrix.os`. Upstream's matrix was
+    # `[ubuntu-latest, windows-latest, macos-latest]` -- plain strings, one
+    # distinct group each. This fork's matrix legs are LABEL ARRAYS, and an
+    # array interpolated into a string contributes nothing, so all three legs
+    # resolved to the single group `rust-test--main` and `cancel-in-progress`
+    # made each leg kill the two still waiting for a runner.
+    #
+    # Measured on eight consecutive runs before this change: exactly one leg
+    # of three ever ran, the other two were `cancelled` with zero steps and a
+    # one-second duration, and WHICH leg survived varied run to run. That is
+    # why `build (self-hosted, Linux, ARM64)` and
+    # `build (self-hosted, Windows, X64)` read as permanently failing on main
+    # while `build (self-hosted, macOS, ARM64)` read as green -- nothing was
+    # wrong with those two legs at the point they were killed; they simply
+    # lost the race to the leg that got a runner first.
     concurrency:
-      group: rust-test-${{ matrix.os }}-${{ github.ref_name }}
+      group: rust-test-${{ join(matrix.os, '-') }}-${{ github.ref_name }}
       cancel-in-progress: true
     strategy:
       matrix:
@@ -40,11 +55,14 @@ jobs:
       uses: Swatinem/rust-cache@v2
       if: github.ref != 'refs/heads/main'
       with:
-        shared-key: "rust-${{ matrix.os }}"
+        # Same array-interpolation bug as the concurrency group above: with
+        # `matrix.os` the three legs shared the key "rust-", so a Windows job
+        # could restore a macOS cache.
+        shared-key: "rust-${{ join(matrix.os, '-') }}"
         save-if: ${{ github.ref == 'refs/heads/main' }}
     - name: Install linux dependencies
       if: runner.os == 'Linux'
-      run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev pkg-config libglib2.0-dev libgtk-3-dev libudev-dev libxdo-dev libwebkit2gtk-4.1-dev
+      uses: ./.github/actions/linux-system-deps
     - name: Remove unused programs in linux
       if: runner.os == 'Linux'
       run: |

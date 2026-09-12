@@ -8,8 +8,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  ANDROID_NDK_HOME: /home/runner/android-ndk-r26d
-  ANDROID_NDK: /home/runner/android-ndk-r26d
 
 permissions:
   contents: read
@@ -25,14 +23,47 @@ jobs:
         with:
           fetch-depth: 2
           submodules: true
-      - name: Remove unused programs
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+      # `$RUNNER_TEMP`, not `/home/runner`. That path is a GitHub-HOSTED
+      # runner's home directory; it came along with the rest of this file when
+      # the job moved to the fleet and nothing on a self-hosted box guarantees
+      # it. On the DGX boxes the runner's home is `/data/ci/<runner>`, and the
+      # job died at
+      #
+      #   checkdir: cannot create extraction directory: /home/runner
+      #
+      # before the NDK was ever unpacked. ANDROID_NDK_HOME/ANDROID_NDK move
+      # out of the workflow-level `env:` for the same reason: that block is
+      # evaluated before any runner context exists, so it cannot name a path
+      # that depends on which box took the job.
       - name: Install NDK r26d
         run: |
-          curl -sSfL -o ndk.zip https://dl.google.com/android/repository/android-ndk-r26d-linux.zip
-          unzip -q ndk.zip -d /home/runner
-          rm ndk.zip
+          set -euo pipefail
+          ndk_parent="$RUNNER_TEMP/android-ndk"
+          rm -rf "$ndk_parent"
+          mkdir -p "$ndk_parent"
+          curl -sSfL -o "$RUNNER_TEMP/ndk.zip" https://dl.google.com/android/repository/android-ndk-r26d-linux.zip
+          unzip -q "$RUNNER_TEMP/ndk.zip" -d "$ndk_parent"
+          rm "$RUNNER_TEMP/ndk.zip"
+          echo "ANDROID_NDK_HOME=$ndk_parent/android-ndk-r26d" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK=$ndk_parent/android-ndk-r26d" >> "$GITHUB_ENV"
+
+      # Google publishes the Linux NDK for x86_64 hosts only -- there is no
+      # `linux-aarch64` prebuilt in r26d. Checking that the host toolchain
+      # both exists and EXECUTES costs a second and turns "this lane cannot
+      # run this job" into one line, instead of an exec-format error surfacing
+      # from inside cargo-ndk after several minutes of compiling.
+      - name: Verify the NDK host toolchain runs here
+        run: |
+          set -euo pipefail
+          clang="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+          if [ ! -x "$clang" ]; then
+            echo "::error::NDK r26d ships no host toolchain usable on $(uname -m) ($clang absent)."
+            exit 1
+          fi
+          if ! "$clang" --version >/dev/null 2>&1; then
+            echo "::error::The NDK host toolchain will not execute on ${RUNNER_NAME:-this runner} ($(uname -m)); NDK r26d is built for linux-x86_64 hosts only."
+            exit 1
+          fi
       - name: Install stable rust toolchain
         uses: dtolnay/rust-toolchain@1.94
         with:
