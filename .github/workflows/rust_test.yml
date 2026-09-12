@@ -80,11 +80,29 @@ jobs:
     - name: Run MacOS and Windows tests
       if: runner.os != 'Linux'
       run: just t
+    # grcov's asset is chosen by `uname -m`, not hardcoded to x86_64. The
+    # Linux lane is aarch64, and the x86_64 tarball is not merely the wrong
+    # download -- these boxes have x86_64 binfmt registered without the
+    # matching loader, so it is dispatched to qemu and dies as
+    #
+    #   x86_64-binfmt-P: Could not open '/lib64/ld-linux-x86-64.so.2'
+    #                                                     (exit 255)
+    #
+    # which is the same trap the Android NDK fell into: on this hardware an
+    # x86_64 binary looks runnable right up until it is run. Everything before
+    # this step passed -- `just t` ran the whole Linux suite green -- so the
+    # only thing this was costing was the coverage upload.
     - name: Run coverage
       if: runner.os == 'Linux'
       run: |
+        set -euo pipefail
         rustup component add llvm-tools-preview
-        curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-x86_64-unknown-linux-gnu.tar.bz2 | tar jxf -
+        case "$(uname -m)" in
+          x86_64)          grcov_target=x86_64-unknown-linux-gnu ;;
+          aarch64|arm64)   grcov_target=aarch64-unknown-linux-gnu ;;
+          *) echo "::error::No grcov release asset for $(uname -m)."; exit 1 ;;
+        esac
+        curl -fsSL "https://github.com/mozilla/grcov/releases/latest/download/grcov-${grcov_target}.tar.bz2" | tar jxf -
         ./grcov . --binary-path ./target/debug/deps -s . -t lcov --branch --ignore-not-existing --ignore "../*" --ignore "/*" -o cov.lcov
     - uses: codecov/codecov-action@v6
       if: runner.os == 'Linux'
