@@ -1,4 +1,39 @@
-name: Deploy docs
+name: Docs build
+
+# Upstream published this rustdoc to the Deno Deploy project `freya-docs` and
+# deleted the workflow outright in marc2332/freya@5810dc4a (2026-07-12,
+# "Migrate to the new Deno Deploy"). This fork kept the file, and its upload
+# step authenticated by OIDC as `repo:maxi-tools/freya:*` against a project in
+# upstream's Deno organization that has never trusted that subject:
+#
+#   APIError: The authorization token is not valid: You don't have permission
+#   to access the project 'freya-docs'.
+#
+# 67 runs since the fork was created on 2026-04-07: 54 failure, 13 cancelled,
+# zero success. It cannot be re-pointed either -- `gh secret list` shows the
+# repo holds only QODANA_TOKEN, no Deno credential of any kind.
+#
+# The `cargo doc` build above it always passed -- including in the run that
+# reddened main, which reached the upload step -- and it is this repo's only
+# rustdoc gate, so the build is kept as a check and only the impossible upload
+# is dropped. `id-token: write` goes with it: nothing here uses OIDC now.
+#
+# deploy_website.yml (project `freya-temp`) and deploy_book.yml (project
+# `freya-book`) carry the identical inherited breakage, but are deliberately
+# left alone here. Both are path-filtered on their own workflow file, so
+# editing one runs it, and neither is currently red on main:
+#
+#   - deploy_website already fails one step EARLIER than the upload, at
+#     `pnpm i`, with ERR_PNPM_IGNORED_BUILDS for esbuild/sharp (pnpm 10 wants
+#     `pnpm.onlyBuiltDependencies`). Dropping its Deno step would not make it
+#     green, it would just move main's red one line down.
+#   - deploy_book's mdBook build has only ever passed on GitHub-hosted x86_64,
+#     in June, before this fork moved to [self-hosted, Linux, ARM64]. Every run
+#     since is `cancelled`, so `peaceiris/actions-mdbook@v2` fetching mdbook
+#     0.4.32 for aarch64 is unverified -- and on these boxes an x86_64 binary
+#     looks runnable until it is run (see the grcov note in rust_test.yml).
+#
+# Both need their own change with their own evidence.
 on:
   push:
     paths:
@@ -11,11 +46,10 @@ env:
 permissions: {}
 
 jobs:
-  deploy:
-    name: Deploy
+  docs:
+    name: Docs build
     runs-on: [self-hosted, macOS, ARM64]
     permissions:
-      id-token: write
       contents: read
 
     steps:
@@ -35,10 +69,3 @@ jobs:
         with:
           toolchain: nightly-2025-09-25
           components: rustfmt
-
-      - name: Upload to Deno Deploy
-        uses: denoland/deployctl@v1
-        with:
-          project: freya-docs
-          entrypoint: https://deno.land/std/http/file_server.ts
-          root: target/doc
