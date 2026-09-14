@@ -65,10 +65,25 @@ jobs:
         # could restore a macOS cache.
         shared-key: "rust-${{ join(matrix.os, '-') }}"
         save-if: ${{ github.ref == 'refs/heads/main' }}
-    - name: Add Git MinGW64 bin to PATH (Windows)
+    - name: Add dlltool to PATH (Windows)
       if: runner.os == 'Windows'
-      shell: bash
-      run: echo "C:/Program Files/Git/mingw64/bin" >> $GITHUB_PATH
+      shell: powershell
+      run: |
+        $candidates = @(
+          'C:\msys64\mingw64\bin',
+          'C:\mingw64\bin',
+          'C:\Program Files\Git\mingw64\bin',
+          'C:\Program Files\Git\usr\bin'
+        )
+        $found = $candidates | Where-Object { Test-Path (Join-Path $_ 'dlltool.exe') } | Select-Object -First 1
+        if ($found) {
+          Add-Content -Path $env:GITHUB_PATH -Value $found
+          Write-Host "Found dlltool at: $found"
+        } else {
+          Write-Host "dlltool not found in common locations; installing MinGW via MSYS2..."
+          & C:\msys64\usr\bin\bash.exe -lc 'pacman -S --noconfirm mingw-w64-x86_64-binutils'
+          Add-Content -Path $env:GITHUB_PATH -Value 'C:\msys64\mingw64\bin'
+        }
     - name: Install linux dependencies
       if: runner.os == 'Linux'
       uses: ./.github/actions/linux-system-deps
