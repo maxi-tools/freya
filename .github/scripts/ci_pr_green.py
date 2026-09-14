@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Answer "is this PR actually green?" without being fooled by superseded runs.
 
 GitHub's PR rollup aggregates check runs across *all* check suites for a SHA
@@ -38,6 +37,13 @@ Three outcomes, three exit codes, deliberately never collapsed:
 Deliberately self-contained: it shells out to `gh` and imports nothing from
 this repository, because it is distributed to the whole fleet from maxi-config
 and most repos have no shared Python helpers to import.
+
+No shebang, on purpose. This file reaches every repo through the fan-out, which
+writes with the GitHub Contents API -- and that API has no mode, so every copy
+lands as 100644. A shebang on a file that is not executable is exactly what
+Codacy's EXE001 flags, and it did, on every recipient that runs Codacy. The
+script is invoked as `python3 <path>` everywhere it is used, so the shebang was
+documentation that cost a red check; the usage line above is the documentation.
 """
 
 # maxi-config-owned PR greenness judge.
