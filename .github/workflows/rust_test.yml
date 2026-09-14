@@ -65,6 +65,10 @@ jobs:
         # could restore a macOS cache.
         shared-key: "rust-${{ join(matrix.os, '-') }}"
         save-if: ${{ github.ref == 'refs/heads/main' }}
+    - name: Add Git MinGW64 bin to PATH (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: echo "C:/Program Files/Git/mingw64/bin" >> $GITHUB_PATH
     - name: Install linux dependencies
       if: runner.os == 'Linux'
       uses: ./.github/actions/linux-system-deps
