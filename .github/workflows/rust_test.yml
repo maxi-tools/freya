@@ -33,24 +33,44 @@ jobs:
     concurrency:
       group: rust-test-${{ join(matrix.os, '-') }}-${{ github.ref_name }}
       cancel-in-progress: true
+    env:
+      # Prevent another job's `rustup default` from overriding the toolchain
+      # selected for this matrix leg (maxi-config#661 pattern).
+      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain }}
     strategy:
-      # One platform's failure must not cancel the other two.
-      # `fail-fast` defaults to true; these legs share nothing and are three
-      # separate answers.
+      # One platform's result must not cancel the other two. `fail-fast`
+      # defaults to true, so the Windows leg failing on a runner-image gap
+      # (maxi-config#661: neither Windows box has `pwsh`, which
+      # `taiki-e/install-action` requires) cancelled the Linux and macOS legs
+      # mid-run and reported three red checks for one problem on one box.
+      # These legs share nothing; they are three separate answers.
       fail-fast: false
       matrix:
-        os:
-          - [self-hosted, Linux, ARM64]
-          - [self-hosted, Windows, X64]
-          - [self-hosted, macOS, ARM64]
+        include:
+          - os: [self-hosted, Linux, ARM64]
+            toolchain: "1.94"
+          - os: [self-hosted, Windows, X64]
+            # The self-hosted Windows runner (audioplaytest) has its machine-wide
+            # rustup default set to x86_64-pc-windows-gnu. windows-sys and
+            # libloading use raw-dylib, which on the GNU toolchain requires MinGW
+            # dlltool -- not present on the box. The same box builds
+            # maxi-tools/maxi-audio green with MSVC (see that workflow's
+            # rust: stable-x86_64-pc-windows-msvc matrix entry + RUSTUP_TOOLCHAIN),
+            # so we pin MSVC here to match what the hardware actually has.
+            toolchain: "1.94-x86_64-pc-windows-msvc"
+          - os: [self-hosted, macOS, ARM64]
+            toolchain: "1.94"
 
     steps:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 2
         submodules: true
-    - name: Install stable rust toolchain
-      uses: dtolnay/rust-toolchain@1.94
+    - name: Install rust toolchain
+      # Same pin maxi-audio uses; the toolchain comes from the matrix, not the ref.
+      uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+      with:
+        toolchain: ${{ matrix.toolchain }}
     - name: Install nextest and just
       shell: bash
       run: |
@@ -65,25 +85,6 @@ jobs:
         # could restore a macOS cache.
         shared-key: "rust-${{ join(matrix.os, '-') }}"
         save-if: ${{ github.ref == 'refs/heads/main' }}
-    - name: Add dlltool to PATH (Windows)
-      if: runner.os == 'Windows'
-      shell: powershell
-      run: |
-        $candidates = @(
-          'C:\msys64\mingw64\bin',
-          'C:\mingw64\bin',
-          'C:\Program Files\Git\mingw64\bin',
-          'C:\Program Files\Git\usr\bin'
-        )
-        $found = $candidates | Where-Object { Test-Path (Join-Path $_ 'dlltool.exe') } | Select-Object -First 1
-        if ($found) {
-          Add-Content -Path $env:GITHUB_PATH -Value $found
-          Write-Host "Found dlltool at: $found"
-        } else {
-          Write-Host "dlltool not found in common locations; installing MinGW via MSYS2..."
-          & C:\msys64\usr\bin\bash.exe -lc 'pacman -S --noconfirm mingw-w64-x86_64-binutils'
-          Add-Content -Path $env:GITHUB_PATH -Value 'C:\msys64\mingw64\bin'
-        }
     - name: Install linux dependencies
       if: runner.os == 'Linux'
       uses: ./.github/actions/linux-system-deps
