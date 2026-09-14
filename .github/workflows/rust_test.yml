@@ -30,6 +30,10 @@ jobs:
     # while `build (self-hosted, macOS, ARM64)` read as green -- nothing was
     # wrong with those two legs at the point they were killed; they simply
     # lost the race to the leg that got a runner first.
+    # Keep the job name the ruleset requires (`build (self-hosted, macOS, ARM64)`):
+    # with `toolchain` in the matrix the default name would grow a fourth
+    # element and the required status check would never be reported.
+    name: build (${{ join(matrix.os, ', ') }})
     concurrency:
       group: rust-test-${{ join(matrix.os, '-') }}-${{ github.ref_name }}
       cancel-in-progress: true
