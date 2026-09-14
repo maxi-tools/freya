@@ -30,11 +30,19 @@ jobs:
     # while `build (self-hosted, macOS, ARM64)` read as green -- nothing was
     # wrong with those two legs at the point they were killed; they simply
     # lost the race to the leg that got a runner first.
+    # Keep the job name the ruleset requires (`build (self-hosted, macOS, ARM64)`):
+    # with `toolchain` in the matrix the default name would grow a fourth
+    # element and the required status check would never be reported.
+    name: build (${{ join(matrix.os, ', ') }})
     concurrency:
       group: rust-test-${{ join(matrix.os, '-') }}-${{ github.ref_name }}
       cancel-in-progress: true
+    env:
+      # Prevent another job's `rustup default` from overriding the toolchain
+      # selected for this matrix leg (maxi-config#661 pattern).
+      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain }}
     strategy:
-      # One platform's result must not delete the other two. `fail-fast`
+      # One platform's result must not cancel the other two. `fail-fast`
       # defaults to true, so the Windows leg failing on a runner-image gap
       # (maxi-config#661: neither Windows box has `pwsh`, which
       # `taiki-e/install-action` requires) cancelled the Linux and macOS legs
@@ -42,22 +50,36 @@ jobs:
       # These legs share nothing; they are three separate answers.
       fail-fast: false
       matrix:
-        os:
-          - [self-hosted, Linux, ARM64]
-          - [self-hosted, Windows, X64]
-          - [self-hosted, macOS, ARM64]
+        include:
+          - os: [self-hosted, Linux, ARM64]
+            toolchain: "1.94"
+          - os: [self-hosted, Windows, X64]
+            # The self-hosted Windows runner (audioplaytest) has its machine-wide
+            # rustup default set to x86_64-pc-windows-gnu. windows-sys and
+            # libloading use raw-dylib, which on the GNU toolchain requires MinGW
+            # dlltool -- not present on the box. The same box builds
+            # maxi-tools/maxi-audio green with MSVC (see that workflow's
+            # rust: stable-x86_64-pc-windows-msvc matrix entry + RUSTUP_TOOLCHAIN),
+            # so we pin MSVC here to match what the hardware actually has.
+            toolchain: "1.94-x86_64-pc-windows-msvc"
+          - os: [self-hosted, macOS, ARM64]
+            toolchain: "1.94"
 
     steps:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 2
         submodules: true
-    - name: Install stable rust toolchain
-      uses: dtolnay/rust-toolchain@1.94
-    - name: Install nextest
-      uses: taiki-e/install-action@nextest
-    - name: Install just
-      uses: taiki-e/install-action@just
+    - name: Install rust toolchain
+      # Same pin maxi-audio uses; the toolchain comes from the matrix, not the ref.
+      uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+      with:
+        toolchain: ${{ matrix.toolchain }}
+    - name: Install nextest and just
+      shell: bash
+      run: |
+        curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+        cargo binstall --no-confirm --log-level warn cargo-nextest just
     - name: Set up cargo cache
       uses: Swatinem/rust-cache@v2
       if: github.ref != 'refs/heads/main'
