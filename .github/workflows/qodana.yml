@@ -173,7 +173,15 @@ jobs:
           github_step_summary "- Full Qodana scan: runs for schedule/manual, strict mode, or same-repo PRs labeled \`run-qodana\`."
           github_step_summary ""
           github_step_summary "## Workflow lane summary"
-          github_step_summary "- merge-gate: qodana sentinel ran on WarpBuild"
+          # DERIVED, not asserted. This line read "ran on WarpBuild" from the
+          # pilot until 2026-09-08, long after the job moved to
+          # `[self-hosted, Linux, X64]` -- and unlike a stale comment it is
+          # OUTPUT, printed into the step summary of every run in every repo
+          # carrying this workflow, telling anyone debugging a Qodana failure
+          # to go and reason about a runner pool this org left. Reading the
+          # environment cannot go stale the next time the lane moves, which
+          # is the only property worth having here.
+          github_step_summary "- merge-gate: qodana sentinel ran on the ${RUNNER_ENVIRONMENT:-unknown} runner \`${RUNNER_NAME:-unknown}\` (${RUNNER_OS:-unknown}/${RUNNER_ARCH:-unknown})"
           github_step_summary "- full-scan: qodana-full is deferred unless this event requests the full scan"
           github_step_summary "- qodana-full runs only for schedule/workflow_dispatch, strict mode, or same-repo PRs labeled \`run-qodana\`"
 
@@ -236,6 +244,17 @@ jobs:
     # A PR that genuinely wants one says so with the `run-qodana` label, and the
     # schedule keeps whole-repo coverage honest. Nothing about fork safety
     # changes -- that is the outer conjunct above, and it stays.
+    #
+    # THE DISPATCH CONJUNCT is the third one, and it is not a fork question.
+    # `github.event_name == 'workflow_dispatch'` sits in the economy
+    # disjunction below as an unconditional admission, and the fork conjunct
+    # above short-circuits on any non-pull_request event -- so a dispatch
+    # cleared both. `gh workflow run --ref` accepts ANY branch, so that was a
+    # route for anyone with write access to run their own branch's qodana.yaml
+    # `bootstrap` -- which is `cargo fetch` over a tree they chose -- inside
+    # this container, next to the org-wide App token this job mints. Pinned to
+    # the owner by numeric id (ci/review-trusted-actors.toml pins 874012);
+    # `schedule` and `push` are untouched.
     if: >
       (
         github.event_name != 'pull_request' ||
@@ -243,6 +262,10 @@ jobs:
           github.event.pull_request.head.repo.full_name == github.repository &&
           github.event.pull_request.user.login != 'dependabot[bot]'
         )
+      ) &&
+      (
+        github.event_name != 'workflow_dispatch' ||
+        github.event.sender.id == 874012
       ) &&
       (
         github.event_name == 'schedule' ||
@@ -322,7 +345,35 @@ jobs:
     # Malformed JSON here fails the job loudly at parse time. That is intended:
     # a silently-ignored override would route the scan to the default pool
     # while the operator believed otherwise.
-    runs-on: ${{ fromJSON(vars.QODANA_RUNS_ON || '["self-hosted","Linux","X64","container-runtime","disk-large"]') }}
+    #
+    # WHO WROTE THE TREE decides the runner, and it decides it HERE rather than
+    # in the `if:` above. The `if:` keeps forks and Dependabot out, which is a
+    # fork test, not an authorship test: a same-repository pull request is
+    # authored by anyone with write access, and `opened` / `reopened` /
+    # `ready_for_review` / `labeled` carry no provenance for the revision at
+    # all -- they fire on a tree somebody else pushed. This job checks out
+    # `pull_request.head.sha` and runs qodana.yaml's bootstrap, i.e. `cargo
+    # fetch` over a Cargo.toml from that tree, as the runner user on a
+    # persistent box, beside the App token minted above. Only an owner-sent
+    # `synchronize` says who pushed the bytes being analysed.
+    #
+    # In `runs-on` for the #345/#346 reason: those were not missing same-repo
+    # tests, they were same-repo tests one level too deep to reach. A condition
+    # that SELECTS the runner cannot fail that way -- if it is ever wrong the
+    # scan lands on a hosted VM instead of losing the guard. Same construct as
+    # maxi-core#3913, maxi-ui#282 and workflows/standard-rust-ci.yml's `rust`.
+    #
+    # Non-pull_request events are unaffected and keep the fleet: `schedule` is
+    # post-merge, `push` is post-merge, and `workflow_dispatch` is pinned to
+    # the owner by the third conjunct of the `if:` above.
+    #
+    # COST: a `run-qodana` pull request from anyone else, or on any action
+    # other than `synchronize`, now runs hosted. While the org's Actions
+    # allowance is exhausted that means the scan is refused before a runner is
+    # assigned rather than skipped quietly -- a worse-looking outcome for an
+    # opt-in advisory lane, and still the right trade against org credentials
+    # on a persistent runner.
+    runs-on: ${{ (github.event_name != 'pull_request' || (github.event.sender.id == 874012 && github.event.action == 'synchronize' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON(vars.QODANA_RUNS_ON || '["self-hosted","Linux","X64","container-runtime","disk-large"]') || 'ubuntu-latest' }}
     # 30 minutes, and that budget now buys analysis instead of a cache
     # round-trip. maxi-core#3862 read a cancelled run as the Qodana Cloud
     # publish overrunning the wall. The log says otherwise: on maxi-core run
@@ -537,6 +588,39 @@ jobs:
             exit 1
           fi
 
+      # `permission-contents: read` is the whole of what this token is for: the
+      # gitconfig written below rewrites https/ssh GitHub URLs so `cargo fetch`
+      # can read private crate sources. Nothing here writes anything.
+      #
+      # It was ABSENT, and absent is not "the default is read". A mint with no
+      # `permission-*` input carries the App installation's FULL permission
+      # set, and this installation is repository_selection=all over 73 repos
+      # (60 private) with contents:write, workflows:write, actions:write and
+      # organization_self_hosted_runners:write. So the unscoped mint put an
+      # org-wide WRITE credential -- including the ability to rewrite workflows
+      # and manage these runners -- into a job that executes qodana.yaml's
+      # bootstrap on a persistent box. Naming the permission is subtractive:
+      # the minted token carries exactly the `permission-*` inputs given, so a
+      # granted-but-unrequested permission becomes an absent one (verified on
+      # maxi-config#559).
+      #
+      # NO `repositories:` list, deliberately. This file is copied
+      # byte-for-byte into every consumer repo and each has a different private
+      # dependency set; a list derived from one repo's Cargo.lock would leave
+      # the others fetching without credentials, which this workflow reports as
+      # "expect unresolved references" -- a green scan that covered less
+      # (maxi-config#557). Narrowing the REACH needs the per-repo rendering
+      # this template deliberately does not have; narrowing the POWER does not,
+      # so that is done here and the rest is recorded.
+      #
+      # BETTER ANSWER, NOT TAKEN HERE: workflows/qodana-personal.yml already
+      # implements maxi-config#566's pattern -- pre-fetch the dependencies in a
+      # throwaway container with the credential mounted read-only from
+      # RUNNER_TEMP, then run the scan against the populated cache with NO
+      # credential in it at all. That removes the token from the step that
+      # executes repository-supplied bootstrap code, rather than shrinking it.
+      # Porting it means restructuring the scan's cache volumes in a 48 KB
+      # template that fans out byte-identically, so it is its own change.
       - name: Generate org repo token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -544,6 +628,7 @@ jobs:
           client-id: ${{ secrets.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           owner: maxi-tools
+          permission-contents: read
 
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -577,6 +662,17 @@ jobs:
       #
       # A PR can still change these files; the sentinel syntax-checks
       # qodana.yaml, and the change takes effect once merged.
+      #
+      # THE BASELINE IS A BOOTSTRAP INPUT for the same reason the rest are.
+      # `.qodana-baseline/qodana.sarif.json` is read from the workspace further
+      # down and passed as `--baseline`, which tells Qodana those problems do
+      # not fail the gate. Taken from the PR tree it is self-certification: a
+      # PR that adds or extends the baseline suppresses the findings that same
+      # PR introduces, and the gate reports green on its own work. Restoring it
+      # from the base means a baseline only ever takes effect once merged --
+      # which is the rule already applied to qodana.yaml, not a new one. The
+      # removal loop below covers the PR-adds-it case, where the base has no
+      # baseline at all.
       - name: Scan pull requests with the base branch's configuration
         if: github.event_name == 'pull_request'
         env:
@@ -596,7 +692,7 @@ jobs:
             git ls-tree -rz --name-only "$tree" |
               while IFS= read -r -d '' f; do
                 case "$f" in
-                  qodana.yaml|qodana.yml|*/.cargo/config|.cargo/config|*/.cargo/config.toml|.cargo/config.toml)
+                  qodana.yaml|qodana.yml|.qodana-baseline/qodana.sarif.json|*/.cargo/config|.cargo/config|*/.cargo/config.toml|.cargo/config.toml)
                     printf '%s\0' "$f"
                     ;;
                 esac
@@ -680,14 +776,50 @@ jobs:
           image="${image#\'}"
           image="${image%\'}"
 
-          # The tag a short name is given. 2026.1-eap is what maxi-config's own
-          # qodana.yaml pins and what maxi-core#3901 verified end to end on this
-          # fleet -- image resolved, container started ("Qodana for Rust 2026.1
-          # EAP, build QDRST-261.25885"), scan completed. Every linter family in
-          # ci/qodana-bootstrap.toml publishes this tag (rust, python, js,
-          # dotnet, go), so it is not a Rust-only assumption, though every one of
-          # the 51 repos above is in fact qodana-rust.
-          default_tag='2026.1-eap'
+          # The tag a short name is given.
+          #
+          # MOVED FROM 2026.1-eap ON 2026-09-12, and the reason is measurement,
+          # not freshness. Under 2026.1-eap the Rust plugin could not finish
+          # build-script evaluation on a large workspace and reported, as
+          # SEVERE:
+          #
+          #   Some Cargo projects failed to load:
+          #     - maxi:
+          #         - Workspace:    ok
+          #         - Std. library: ok
+          #         - Compiler:     ok
+          #         - Build script: failed (Build script evaluation failed)
+          #
+          # Without build-script output the plugin loses cfg flags, OUT_DIR
+          # code and proc-macro expansion, and its resolution collapses -- so it
+          # reports its own broken inference as defects in the repository:
+          # `Variable `None` is never used` where the source says `None => ...`,
+          # `Method `then_some` is private [E0624]` on a std method,
+          # ``expected `&char`, but found `&str``` on `str::find`.
+          #
+          # Three full scans of maxi-core, same commit, same runner pool
+          # (2026-09-12):
+          #
+          #   2026.1-eap, stock image            1392 pkgs, build script FAILED,
+          #                                      2019 problems, NEW 816, sanity 42
+          #   2026.1-eap + openssl/libclang      1392 pkgs, build script FAILED,
+          #     added to the container           2024 problems, NEW 821, sanity 41
+          #   2026.2-eap, stock image            1420 pkgs, build script OK,
+          #                                      2166 problems, NEW  91, sanity 28
+          #
+          # Runs 34673963861, 34676306870 and 34676795377. Supplying the missing
+          # native build dependencies was tried FIRST and did not help -- the
+          # graph still failed to load -- so the container is left alone and only
+          # the tag moves. NEW is the number the `any: 0` gate reads: 816 -> 91,
+          # and the residue is ordinary findings (48 unnecessary path prefixes,
+          # 12 unused imports, 7 unnecessary casts) rather than unresolved-symbol
+          # noise.
+          #
+          # Verified for every family in ci/qodana-bootstrap.toml before bumping,
+          # because this tag is not Rust-only: jetbrains/qodana-{rust,python,js,
+          # dotnet,go} all publish 2026.2-eap. Rust is the one that publishes
+          # ONLY -eap tags, which is why the fleet default keeps that suffix.
+          default_tag='2026.2-eap'
 
           # Normalise, never rewrite. A value that already names a repository or
           # already carries a tag or digest is left exactly as written, so an
@@ -1538,8 +1670,85 @@ jobs:
       # This adds no failure mode on the scan-died path: `Assert the scan
       # produced a report` above already fails the job when there is no SARIF
       # to upload.
-      - name: Upload SARIF to GitHub
+      # WHY A PROBE, AND WHY IT IS NOT `continue-on-error`.
+      #
+      # The upload step below is blocking, for the reasons argued above, and it
+      # must stay blocking. But "blocking" has to mean "the delivery this
+      # repository is configured for did not happen", and on 2026-09-11 it
+      # meant something else in nine repositories: qodana-full was red on main
+      # in maxi-firmware-{core,embassy,std}, maxi-action-heptathlon,
+      # maxi-audio, maxi-vector-cloud, maxi-stackchan, maxi-warp-spike and
+      # maxi-warp-bridge, every one of them on
+      #
+      #   Code Security must be enabled for this repository to use code
+      #   scanning. - https://docs.github.com/rest
+      #
+      # after a scan that had completed and produced a report. Those
+      # repositories are private and attached to the org configuration
+      # `Secret Protection enabled` (id 218105), which carries
+      # `advanced_security: secret_protection` and
+      # `code_scanning_default_setup: disabled`. Forty-two repositories in this
+      # org carry it. That is a deliberate posture -- secret scanning yes, paid
+      # code scanning no -- and not something a merge gate gets to overrule by
+      # staying red until somebody buys GHAS for the fleet.
+      #
+      # So the discriminator is the SPECIFIC failure, never the step's exit
+      # code. A 403 whose body is that message means the backend is switched
+      # off on purpose: skip the upload and say so. Any other outcome -- a 403
+      # reading `Resource not accessible by integration`, which is exactly the
+      # permissions bug the comment above was written about, a 401, a 404, a
+      # 5xx, a body this probe cannot read -- exits non-zero and takes the job
+      # with it. Fail closed: the only path to skipping is the one message.
+      #
+      # This is deliberately NOT `continue-on-error` on the upload, and not a
+      # check for an empty analyses list. Both of those turn every delivery
+      # failure into silence, which is the state this template spent
+      # maxi-core#3900 climbing out of.
+      - name: Determine whether code scanning can receive the SARIF
+        id: code_scanning
         if: always() && steps.scan.outcome != 'skipped'
-        uses: github/codeql-action/upload-sarif@v3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # In $RUNNER_TEMP for consistency with the rest of the workflow's
+          # scratch paths, and with an explicit XXXXXX template so this is the
+          # same call on BSD mktemp as on GNU.
+          body="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/code-scanning-probe.XXXXXX")"
+          trap 'rm -f "$body"' EXIT
+
+          code="$(curl -sS -o "$body" -w '%{http_code}' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/code-scanning/analyses?per_page=1" \
+            || echo '000')"
+
+          case "$code" in
+            200)
+              echo 'available=true' >> "$GITHUB_OUTPUT"
+              echo "code scanning is enabled on ${GITHUB_REPOSITORY}; the upload below is blocking."
+              ;;
+            403)
+              if grep -qF 'Code Security must be enabled for this repository' "$body"; then
+                echo 'available=false' >> "$GITHUB_OUTPUT"
+                echo "::notice::Code scanning is disabled on ${GITHUB_REPOSITORY}, so the SARIF cannot be delivered to the Security tab. The scan itself ran and remains blocking, and the report is attached to this run as the qodana-sarif artifact. Enable Code Security on the repository, or move it off the org's Secret-Protection-only configuration, to restore Security-tab delivery."
+              else
+                echo "::error::Code scanning probe was refused with 403, but not because Code Security is disabled. This is a permissions or configuration fault and is NOT a reason to skip the upload. Response body:"
+                cat "$body"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::Code scanning probe returned HTTP ${code}, which this workflow cannot interpret. Refusing to guess whether the SARIF upload would have worked. Response body:"
+              cat "$body"
+              exit 1
+              ;;
+          esac
+
+      - name: Upload SARIF to GitHub
+        if: always() && steps.scan.outcome != 'skipped' && steps.code_scanning.outputs.available == 'true'
+        uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d # v3.37.9
         with:
           sarif_file: ${{ runner.temp }}/qodana/results/qodana.sarif.json
