@@ -47,6 +47,13 @@ inputs:
   node:
     description: 'Ensure Node.js is available'
     default: 'false'
+  ios-simulator:
+    description: >-
+      Install an iOS simulator runtime on macOS runners that have full Xcode but
+      no runtimes. 'auto' installs only when Xcode is present and no runtime is;
+      'false' never installs. There is nothing to force, because the install is
+      already skipped when a runtime exists.
+    default: 'auto'
   system-deps:
     description: 'Install system-level build deps (libasound, dbus, etc.)'
     default: 'false'
@@ -525,6 +532,68 @@ runs:
 
         # Accept Xcode license (required for first use on fresh systems)
         sudo xcodebuild -license accept 2>/dev/null || true
+
+    # ── iOS simulator runtime ──────────────────────────────────────────
+    - name: Install iOS simulator runtime
+      if: inputs.ios-simulator != 'false' && runner.os == 'macOS'
+      shell: bash
+      run: |
+        # Simulator runtimes are a SEPARATE multi-gigabyte download from Xcode.
+        # A fresh Xcode install has none, and `xcodebuild -version` cannot tell
+        # you so -- which is how eight Macs came to advertise `ios` while being
+        # unable to boot anything, and how maxi-ios-bridge's iOS lane spent
+        # 2026-09-12 failing on whichever runner happened to pick it up.
+        #
+        # Provisioned here rather than left to an operator, because that is the
+        # difference between a capability the fleet HAS and one a label merely
+        # claims. `sim` is now derived from this same fact by
+        # scripts/node_labels.py, so a runner that completes this step earns the
+        # label on the next reconcile and one that does not, loses it.
+        if ! xcodebuild -version >/dev/null 2>&1; then
+          echo "::notice::No full Xcode here - skipping. Command Line Tools alone cannot boot a simulator, and this box will correctly not carry sim."
+          exit 0
+        fi
+
+        # Grepped rather than parsed: `simctl list runtimes available` prints one
+        # line per runtime beginning with the platform name, and a shell check
+        # keeps this step free of an embedded interpreter. Not `grep -q`: under
+        # pipefail a grep that stops reading at the first match can SIGPIPE
+        # simctl, and 141 would make a box WITH a runtime look like one
+        # without and re-download it.
+        have_runtime() {
+          xcrun simctl list runtimes available 2>/dev/null | grep '^iOS ' >/dev/null
+        }
+
+        if have_runtime; then
+          echo "iOS simulator runtime already present:"
+          xcrun simctl list runtimes available 2>/dev/null | grep '^iOS ' | head -3 || true
+          exit 0
+        fi
+
+        echo "No iOS simulator runtime found - downloading. Multi-gigabyte and slow."
+        # A failure here is a WARNING, not an error. A runner without simulators
+        # is still good for every non-iOS lane, and failing setup would take
+        # those down too. The sim label is what stops iOS work being routed
+        # here, and it is derived from the same check this step just ran.
+        #
+        # Bounded by perl alarm(), not `timeout`. macOS ships no GNU timeout --
+        # only Homebrew coreutils provides one, and nothing here installs it --
+        # so under `if !` a command-not-found read exactly like a failed
+        # download: warning, exit 0, nothing installed, on every box without
+        # coreutils (#692 review). /usr/bin/perl is part of the OS, and alarm()
+        # survives exec, so the download itself takes SIGALRM at the hour mark
+        # and reports non-zero like any other failure.
+        if ! perl -e "alarm shift; exec @ARGV" 3600 xcodebuild -downloadPlatform iOS -quiet; then
+          echo "::warning::iOS simulator download failed or timed out on ${RUNNER_NAME:-this runner}. It will not carry sim, so iOS lanes will not route here. Re-run setup, or install manually with 'xcodebuild -downloadPlatform iOS'."
+          exit 0
+        fi
+
+        if have_runtime; then
+          echo "iOS simulator runtime installed:"
+          xcrun simctl list runtimes available 2>/dev/null | grep '^iOS ' | head -3 || true
+        else
+          echo "::warning::xcodebuild -downloadPlatform reported success but no iOS runtime is available. Not failing setup; this runner simply will not carry sim."
+        fi
 
     - name: Verify Metal shader toolchain
       if: runner.os == 'macOS'
