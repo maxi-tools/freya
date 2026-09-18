@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  test:
     runs-on: ${{ matrix.os }}
     # `join(matrix.os, '-')`, NOT `matrix.os`. Upstream's matrix was
     # `[ubuntu-latest, windows-latest, macos-latest]` -- plain strings, one
