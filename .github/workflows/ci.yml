@@ -41,4 +41,31 @@ jobs:
       pages: write
     with:
       repo_policy: standard-rust
-    secrets: inherit
+    # Named, not inherited. `secrets: inherit` forwards EVERY org secret this
+    # repository can see -- this org's are all visibility=all, so that is all of
+    # them, model-provider and coverage-service credentials included -- to a
+    # workflow that declares exactly two and uses exactly two, to mint a
+    # contents:read app token. (Deliberately not enumerated here: which
+    # credentials an org holds is itself worth not publishing, and this file is
+    # world-readable.)
+    #
+    # That grant is wrong everywhere, and it is worse here than in the private
+    # consumers: this repository is PUBLIC, and the called workflow is moving to
+    # a public repository so that a public caller can resolve it at all. After
+    # that move, write access to the callee is equivalent to read access to
+    # every org secret named above, from here, on every push.
+    #
+    # Two secrets is what rust-ci.yml declares under `on.workflow_call.secrets`
+    # and what its lanes forward to create-github-app-token. Nothing below the
+    # call site can reference a secret that is not named here.
+    #
+    # This matches maxi-config/workflows/standard-rust-ci-wrapper.yml, which is
+    # the canonical template and has always had the explicit form. The drift is
+    # not local: 35 of 36 consumers carry `inherit` and the template is the
+    # outlier, because the fan-out resolves its own source by filesystem
+    # enumeration order -- see maxi-config#626. Converging the other 34 is a
+    # separate, measured fan-out; this one is done here because it is the only
+    # public consumer.
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
