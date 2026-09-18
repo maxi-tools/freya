@@ -450,7 +450,9 @@ runs:
             build-essential pkg-config cmake \
             libasound2-dev libudev-dev libdbus-1-dev \
             libxcb1-dev libxcb-shm0-dev libxcb-randr0-dev \
-            libxdo-dev libssl-dev; then
+            libxdo-dev libssl-dev \
+            libfreetype6-dev libfontconfig1-dev libegl1-mesa-dev \
+            libgl1-mesa-dev libwayland-dev libgles2-mesa-dev libxkbcommon-dev; then
             echo "::error::apt-get install of system dependencies failed after 5 attempts on ${RUNNER_NAME:-this runner}"
             exit 1
           fi
@@ -487,13 +489,7 @@ runs:
           if [ -n "$CLT_PKG" ]; then
             softwareupdate -i "$CLT_PKG" --verbose 2>/dev/null || true
           else
-            echo "::warning::Could not find CLT package via softwareupdate — trying xcode-select"
-            xcode-select --install 2>/dev/null || true
-            # Bounded wait (max 5 minutes) to avoid infinite hang in headless CI
-            for i in $(seq 1 60); do
-              xcode-select -p &>/dev/null && break
-              sleep 5
-            done
+            echo "::warning::Could not find CLT package via softwareupdate; provision Command Line Tools on this runner manually"
           fi
           rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
 
@@ -692,6 +688,9 @@ runs:
       id: rust-install
       if: inputs.rust == 'true'
       shell: bash
+      env:
+        REQUESTED: ${{ inputs.rust-version }}
+        COMPONENTS: ${{ inputs.rust-components }}
       run: |
         # Same contract as `Configure sccache` above -- the MACHINE decides where
         # its caches live and the repo only fills gaps -- but rustup has no
@@ -758,13 +757,12 @@ runs:
         cargo_env
 
         NEED_INSTALL=false
-        REQUESTED="${{ inputs.rust-version }}"
 
         if ! command -v rustc &>/dev/null; then
           NEED_INSTALL=true
-        elif [ "$REQUESTED" = "stable" ] && command -v rustup &>/dev/null; then
-          rustup update stable
-          rustup default stable
+        elif { [ "$REQUESTED" = "stable" ] || [ "$REQUESTED" = "nightly" ]; } && command -v rustup &>/dev/null; then
+          rustup update "$REQUESTED"
+          rustup default "$REQUESTED"
           cargo_env
         elif [ "$REQUESTED" = "stable" ]; then
           NEED_INSTALL=true
@@ -782,9 +780,9 @@ runs:
           cargo_env
         fi
 
-        COMPONENTS="${{ inputs.rust-components }}"
         if [ -n "$COMPONENTS" ]; then
-          rustup component add $(echo "$COMPONENTS" | tr ',' ' ') 2>/dev/null || true
+          IFS=$' \t\n' read -ra RUST_COMPONENTS <<< "${COMPONENTS//,/ }"
+          rustup component add "${RUST_COMPONENTS[@]}" || echo "::warning::Failed to install some Rust components"
         fi
 
         echo "version=$(rustc --version)" >> $GITHUB_OUTPUT
@@ -793,21 +791,25 @@ runs:
     - name: Install cargo tools
       if: inputs.cargo-tools != ''
       shell: bash
+      env:
+        CARGO_TOOLS: ${{ inputs.cargo-tools }}
       run: |
         # Same reason as the Install Rust step's cargo_env: CARGO_HOME is not
         # always $HOME/.cargo, and sourcing the wrong path silently leaves
         # cargo off PATH for the installs below.
         _cargo_env="${CARGO_HOME:-$HOME/.cargo}/env"
         [ -f "$_cargo_env" ] && . "$_cargo_env"
-        IFS=',' read -ra TOOLS <<< "${{ inputs.cargo-tools }}"
+        IFS=',' read -ra TOOLS <<< "$CARGO_TOOLS"
         for tool in "${TOOLS[@]}"; do
           tool=$(echo "$tool" | xargs)
           BIN="cargo-${tool}"
           [ "$tool" = "nextest" ] && BIN="cargo-nextest"
           if ! command -v "$BIN" &>/dev/null; then
             echo "Installing $tool..."
-            if [ "$tool" = "nextest" ]; then
+            if [ "$tool" = "nextest" ] && [ "$RUNNER_OS" != "Windows" ]; then
               # Fast pre-built binary
+              # Windows publishes a ZIP, not the tarball consumed here; use
+              # the cargo install path below on Windows.
               NEXTEST_PLATFORM=$(uname -s | tr '[:upper:]' '[:lower:]')
               [ "$NEXTEST_PLATFORM" = "darwin" ] && NEXTEST_PLATFORM="mac"
               curl -LsSf "https://get.nexte.st/latest/${NEXTEST_PLATFORM}" 2>/dev/null \
@@ -876,7 +878,7 @@ runs:
         if command -v apt-get &>/dev/null; then
           sudo mkdir -p /etc/apt/keyrings
           wget -q -O - https://repo.radeon.com/rocm/rocm.gpg.key \
-            | sudo gpg --dearmor -o /etc/apt/keyrings/rocm.gpg 2>/dev/null || true
+            | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/rocm.gpg 2>/dev/null || true
           DISTRO=$(. /etc/os-release && echo "$VERSION_CODENAME")
           ARCH=$(dpkg --print-architecture)
           echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/latest $DISTRO main" | sudo tee /etc/apt/sources.list.d/rocm.list
@@ -921,12 +923,12 @@ runs:
         if command -v apt-get &>/dev/null; then
           sudo mkdir -p /etc/apt/keyrings
           wget -q https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB -O - \
-            | sudo gpg --dearmor -o /etc/apt/keyrings/intel-openvino.gpg 2>/dev/null || true
-          DISTRO=$(. /etc/os-release && echo "$VERSION_CODENAME")
+            | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/intel-openvino.gpg 2>/dev/null || true
+          DISTRO=$(. /etc/os-release && echo "$ID:$VERSION_CODENAME")
           case "$DISTRO" in
-            jammy) OV_DISTRO="ubuntu22" ;;
-            noble) OV_DISTRO="ubuntu24" ;;
-            *) OV_DISTRO="ubuntu24" ;;
+            ubuntu:jammy) OV_DISTRO="ubuntu22" ;;
+            ubuntu:noble) OV_DISTRO="ubuntu24" ;;
+            *) echo "::warning::OpenVINO auto-install unsupported on $DISTRO; install manually"; exit 0 ;;
           esac
           echo "deb [signed-by=/etc/apt/keyrings/intel-openvino.gpg] https://apt.repos.intel.com/openvino/2025 $OV_DISTRO main" | sudo tee /etc/apt/sources.list.d/intel-openvino.list 2>/dev/null || true
           sudo apt-get update -qq 2>/dev/null || true
@@ -980,8 +982,10 @@ runs:
             ISSUES=$((ISSUES+1))
           fi
           # Quick Metal GPU smoke test — try to compile a trivial shader
-          TMPSHADER=$(mktemp /tmp/metal_test.XXXXXX)
-          TMPOUT=$(mktemp /tmp/metal_test.XXXXXX)
+          METAL_TMP=$(mktemp -d "${RUNNER_TEMP:-/tmp}/metal_test.XXXXXX")
+          trap 'rm -rf "$METAL_TMP"' EXIT
+          TMPSHADER="$METAL_TMP/test.metal"
+          TMPOUT="$METAL_TMP/test.air"
           echo 'kernel void test_kernel(device float *out [[buffer(0)]], uint id [[thread_position_in_grid]]) { out[id] = 1.0; }' > "$TMPSHADER"
           if xcrun metal -c "$TMPSHADER" -o "$TMPOUT" 2>/dev/null; then
             echo "  Metal shader compile: OK"
@@ -1002,8 +1006,9 @@ runs:
       id: ort-unix
       if: inputs.onnxruntime == 'true' && runner.os != 'Windows'
       shell: bash
+      env:
+        ORT_VERSION: ${{ inputs.onnxruntime-version }}
       run: |
-        ORT_VERSION="${{ inputs.onnxruntime-version }}"
         PLATFORM="${{ steps.detect.outputs.platform }}"
         HAS_CUDA="${{ steps.hw.outputs.has_cuda }}"
         HAS_ROCM="${{ steps.hw.outputs.has_rocm }}"
@@ -1088,8 +1093,15 @@ runs:
         # Fix nested dir if --strip-components didn't fully flatten
         NESTED="$ORT_CACHE/onnxruntime-${ORT_ARCH}-${ORT_VERSION}"
         if [ -d "$NESTED" ] && [ ! -f "$ORT_CACHE/$ORT_LIB" ]; then
-          mv "$NESTED"/* "$NESTED"/.* "$ORT_CACHE"/ 2>/dev/null || true
-          rmdir "$NESTED" 2>/dev/null || true
+          # dotglob includes hidden files but never . or ..; nullglob avoids
+          # passing literal unmatched patterns to mv on an empty directory.
+          shopt -s dotglob nullglob
+          ORT_FILES=("$NESTED"/*)
+          if [ "${#ORT_FILES[@]}" -gt 0 ]; then
+            mv "${ORT_FILES[@]}" "$ORT_CACHE"/
+          fi
+          shopt -u dotglob nullglob
+          rmdir "$NESTED"
         fi
 
         DYLIB_PATH="$ORT_CACHE/$ORT_LIB"
@@ -1105,8 +1117,10 @@ runs:
       id: ort-win
       if: inputs.onnxruntime == 'true' && runner.os == 'Windows'
       shell: pwsh
+      env:
+        ORT_VERSION: ${{ inputs.onnxruntime-version }}
       run: |
-        $OrtVersion = "${{ inputs.onnxruntime-version }}"
+        $OrtVersion = $env:ORT_VERSION
         $HasCuda = "${{ steps.hw.outputs.has_cuda }}"
 
         # Pick GPU or CPU build
@@ -1131,7 +1145,7 @@ runs:
           # directory -- and the cleanup below would delete the other job's
           # extraction out from under its Copy-Item. A GUID cannot collide and
           # is not guessable. (Codacy, maxi-io #162)
-          $Scratch = Join-Path $env:TEMP ("ort-extract-" + [guid]::NewGuid().ToString("N"))
+          $Scratch = Join-Path $env:RUNNER_TEMP ("ort-extract-" + [guid]::NewGuid().ToString("N"))
           New-Item -ItemType Directory -Force -Path $Scratch | Out-Null
           $ZipPath = Join-Path $Scratch $ZipName
           try {
@@ -1152,7 +1166,7 @@ runs:
               $ZipName = "onnxruntime-$OrtVariant-$OrtVersion.zip"
               $OrtUrl = "https://github.com/microsoft/onnxruntime/releases/download/v$OrtVersion/$ZipName"
               New-Item -ItemType Directory -Force -Path $OrtDir | Out-Null
-              $Scratch = Join-Path $env:TEMP ("ort-extract-" + [guid]::NewGuid().ToString("N"))
+              $Scratch = Join-Path $env:RUNNER_TEMP ("ort-extract-" + [guid]::NewGuid().ToString("N"))
               New-Item -ItemType Directory -Force -Path $Scratch | Out-Null
               $ZipPath = Join-Path $Scratch $ZipName
               Invoke-WebRequest -Uri $OrtUrl -OutFile $ZipPath
@@ -1195,7 +1209,8 @@ runs:
           elif command -v brew &>/dev/null; then
             brew install python3 2>/dev/null || true
           elif command -v nix &>/dev/null; then
-            echo "$(nix build nixpkgs#python311 --no-link --print-out-paths)/bin" >> "$GITHUB_PATH"
+            NIX_PYTHON=$(nix --extra-experimental-features 'nix-command flakes' build nixpkgs#python311 --no-link --print-out-paths)
+            echo "$NIX_PYTHON/bin" >> "$GITHUB_PATH"
           fi
         fi
 
@@ -1209,19 +1224,33 @@ runs:
     - name: Provision Python 3.11 venv and yt-dlp
       if: inputs.python-venv == 'true' || inputs.yt-dlp == 'true'
       shell: bash
+      env:
+        INSTALL_YT_DLP: ${{ inputs.yt-dlp }}
       run: |
         set -euo pipefail
         if command -v python3.11 >/dev/null 2>&1; then PY=python3.11
         elif command -v python3.12 >/dev/null 2>&1; then PY=python3.12
         elif command -v python3.13 >/dev/null 2>&1; then PY=python3.13
         elif command -v python3 >/dev/null 2>&1 && python3 -c 'import sys; raise SystemExit(0 if sys.version_info[:2] >= (3,11) else 1)'; then PY=python3
-        elif command -v nix >/dev/null 2>&1; then PY="$(nix build nixpkgs#python311 --no-link --print-out-paths)/bin/python3.11"
+        elif command -v nix >/dev/null 2>&1; then PY="$(nix --extra-experimental-features 'nix-command flakes' build nixpkgs#python311 --no-link --print-out-paths)/bin/python3.11"
         elif command -v brew >/dev/null 2>&1; then HOMEBREW_NO_AUTO_UPDATE=1 brew install --quiet python@3.11 >/dev/null 2>&1 || true; PY="$(command -v python3.11 || true)"
         elif command -v choco >/dev/null 2>&1; then choco install -y python311 >/dev/null 2>&1 || true; PY="$(command -v python3.11 || command -v python || true)"
         elif command -v winget >/dev/null 2>&1; then winget install -e --id Python.Python.3.11 --silent >/dev/null 2>&1 || true; PY="$(command -v python3.11 || command -v python || true)"
+        elif command -v apt-get >/dev/null 2>&1; then
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3 python3-venv
+          PY=python3
         else PY=""; fi
         if [ -z "${PY:-}" ]; then
-          echo "::error::could not provision Python 3.11 on ${RUNNER_NAME:-this runner} (no python3.11 and no nix/brew/choco/winget)"; exit 1
+          echo "::error::could not provision Python 3.11 on ${RUNNER_NAME:-this runner} (no python3.11 and no apt/nix/brew/choco/winget)"; exit 1
+        fi
+        "$PY" -c 'import sys; raise SystemExit(0 if sys.version_info[:2] >= (3,11) else "Python 3.11+ is required; provision it on this runner")'
+        # Debian/Ubuntu split ensurepip out of the interpreter package. Match
+        # the selected interpreter, which may differ from system python3.
+        if ! "$PY" -c 'import venv, ensurepip' >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+          PY_MINOR=$("$PY" -c 'import sys; print("%s.%s" % sys.version_info[:2])')
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "python${PY_MINOR}-venv"
         fi
         echo "Python interpreter: $PY ($("$PY" --version 2>&1))"
 
@@ -1250,7 +1279,7 @@ runs:
         "$BIN/python" -m pip install --quiet --upgrade pip
         echo "venv python: $("$BIN/python" --version 2>&1) at $BIN"
 
-        if [ "${{ inputs.yt-dlp }}" = "true" ]; then
+        if [ "$INSTALL_YT_DLP" = "true" ]; then
           "$BIN/python" -m pip install --quiet yt-dlp
           "$BIN/yt-dlp" --version >/dev/null 2>&1 || { echo "::error::yt-dlp install failed"; exit 1; }
           echo "yt-dlp: $("$BIN/yt-dlp" --version 2>&1)"
