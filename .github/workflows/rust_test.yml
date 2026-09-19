@@ -15,40 +15,203 @@ permissions:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    # `join(matrix.os, '-')`, NOT `matrix.os`. Upstream's matrix was
+    # `[ubuntu-latest, windows-latest, macos-latest]` -- plain strings, one
+    # distinct group each. This fork's matrix legs are LABEL ARRAYS, and an
+    # array interpolated into a string contributes nothing, so all three legs
+    # resolved to the single group `rust-test--main` and `cancel-in-progress`
+    # made each leg kill the two still waiting for a runner.
+    #
+    # Measured on eight consecutive runs before this change: exactly one leg
+    # of three ever ran, the other two were `cancelled` with zero steps and a
+    # one-second duration, and WHICH leg survived varied run to run. That is
+    # why `build (self-hosted, Linux, ARM64)` and
+    # `build (self-hosted, Windows, X64)` read as permanently failing on main
+    # while `build (self-hosted, macOS, ARM64)` read as green -- nothing was
+    # wrong with those two legs at the point they were killed; they simply
+    # lost the race to the leg that got a runner first.
+    # Keep the job name the ruleset requires (`build (self-hosted, macOS, ARM64)`):
+    # with `toolchain` in the matrix the default name would grow a fourth
+    # element and the required status check would never be reported.
+    name: build (${{ join(matrix.os, ', ') }})
     concurrency:
-      group: rust-test-${{ matrix.os }}-${{ github.ref_name }}
+      group: rust-test-${{ join(matrix.os, '-') }}-${{ github.ref_name }}
       cancel-in-progress: true
+    env:
+      # Prevent another job's `rustup default` from overriding the toolchain
+      # selected for this matrix leg (maxi-config#661 pattern).
+      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain }}
     strategy:
+      # One platform's result must not cancel the other two. `fail-fast`
+      # defaults to true, so the Windows leg failing on a runner-image gap
+      # (maxi-config#661: neither Windows box has `pwsh`, which
+      # `taiki-e/install-action` requires) cancelled the Linux and macOS legs
+      # mid-run and reported three red checks for one problem on one box.
+      # These legs share nothing; they are three separate answers.
+      fail-fast: false
       matrix:
-        os:
-          - [self-hosted, Linux, ARM64]
-          - [self-hosted, Windows, X64]
-          - [self-hosted, macOS, ARM64]
+        include:
+          - os: [self-hosted, Linux, ARM64]
+            toolchain: "1.94"
+          - os: [self-hosted, Windows, X64]
+            # The self-hosted Windows runner (audioplaytest) has its machine-wide
+            # rustup default set to x86_64-pc-windows-gnu. windows-sys and
+            # libloading use raw-dylib, which on the GNU toolchain requires MinGW
+            # dlltool -- not present on the box. The same box builds
+            # maxi-tools/maxi-audio green with MSVC (see that workflow's
+            # rust: stable-x86_64-pc-windows-msvc matrix entry + RUSTUP_TOOLCHAIN),
+            # so we pin MSVC here to match what the hardware actually has.
+            toolchain: "1.94-x86_64-pc-windows-msvc"
+          - os: [self-hosted, macOS, ARM64]
+            toolchain: "1.94"
 
     steps:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 2
         submodules: true
-    - name: Install stable rust toolchain
-      uses: dtolnay/rust-toolchain@1.94
-    - name: Install nextest
-      uses: taiki-e/install-action@nextest
-    - name: Install just
-      uses: taiki-e/install-action@just
+    - name: Install rust toolchain
+      # Same pin maxi-audio uses; the toolchain comes from the matrix, not the ref.
+      uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+      with:
+        toolchain: ${{ matrix.toolchain }}
+    - name: Install cargo-binstall
+      shell: bash
+      # Two separate steps, not one. The upstream installer script ends with
+      # `./cargo-binstall --self-install`, and when that succeeds it appends
+      # `$CARGO_HOME/bin` to `$GITHUB_PATH` -- which the runner only applies to
+      # the NEXT step. Piping the script and then calling `cargo binstall` in
+      # the SAME step means the second line runs with the pre-script PATH.
+      #
+      # On Windows that was harmless: `CARGO_HOME` there is
+      # `C:\WINDOWS\system32\config\systemprofile\.cargo`, already on PATH from
+      # the `dtolnay/rust-toolchain` step, so the installer's
+      # `case ":$PATH:" in *":$CARGO_HOME/bin:"*)` arm matched, it skipped the
+      # `$GITHUB_PATH` write, and `cargo binstall` resolved in-step. On Linux
+      # (`/data/ci/peridot-1/.cargo`) and macOS (`/Users/maxi/.cargo`) the arm
+      # did not match, the path was deferred to the next step, and
+      # `cargo binstall` was NOT on PATH.
+      #
+      # `cargo binstall` failing is invisible: cargo prints
+      # `no such command: binstall` to stderr and this step has no `set -e`
+      # guard on that line, so the step exits 0 having installed nothing. The
+      # job then runs for two minutes of `cargo test --doc` and dies at
+      # `cargo nextest run` with `error: no such command: nextest`.
+      #
+      # Measured across the last four `Rust Test` runs on main
+      # (34747187019, 34801140539, 34860026700, 35081767391): exactly the legs
+      # whose `CARGO_HOME/bin` was absent from PATH failed, and WHICH legs
+      # those were tracked the runner, not the code. Run 35081767391 is the
+      # clean demonstration -- Windows green, Linux and macOS both red with
+      # `no such command: nextest`, on a commit that touches only
+      # `maxi-review` workflow files.
+      run: |
+        curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+    - name: Install nextest and just binaries
+      shell: bash
+      env:
+        # Both prebuilt-artifact fetchers query GitHub. Unauthenticated that is
+        # 60 requests/hour shared across every job on the box, and these
+        # self-hosted runners host several repos. Run 35417843468 hit four
+        # `WARN Timeout reached while checking fetcher` lines in one step.
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # `--force` is the load-bearing flag. binstall decides "already
+      # installed" from cargo's install metadata (`$CARGO_HOME/.crates.toml`),
+      # not from the binary's presence on disk. These runners are persistent
+      # and non-ephemeral, and their cleanup hooks reclaim disk between jobs --
+      # the macOS runner logs `[cleanup-job] still under 60 GiB floor (53 GiB)
+      # - aggressive pass`. That deletes binaries under `$CARGO_HOME/bin` and
+      # leaves `.crates.toml` naming them, so binstall no-ops on a toolchain
+      # that is not there.
+      #
+      # Measured on run 35418987264, job 105832967865, Linux leg:
+      #
+      #   cargo-binstall: INFO cargo-nextest v0.9.145 is already installed,
+      #                        use --force to override
+      #   cargo-binstall: INFO just v1.58.0 is already installed,
+      #                        use --force to override
+      #   cargo-binstall: INFO Done in 627.089436ms
+      #   --- binstall exited 0, verifying ---
+      #   ##[error]Process completed with exit code 1
+      #
+      # binstall exited 0 having installed nothing and the very next line,
+      # `command -v cargo-nextest`, found nothing. This is the fault that has
+      # been reported as `error: no such command: nextest` since 1d3be78, and
+      # it is why WHICH matrix leg went red varied run to run: it tracked which
+      # runner had most recently had a cleanup pass, not the code under test.
+      #
+      # `set -euo pipefail` plus the `command -v` assertions are what turned
+      # this from a silent no-op into a red step naming its cause; keep them.
+      #
+      # `--locked` because the source fallback is a hard error for this crate:
+      # cargo-nextest ships a `locked-tripwire` lib whose entire body is a
+      # `compile_error!` reading "Nextest does not support being installed
+      # without --locked" (observed on run 35417843468 after both fetchers
+      # timed out). `--maximum-resolution-timeout 60` (default 15) gives the
+      # prebuilt fetchers headroom on shared hardware so that fallback stays
+      # unreached.
+      run: |
+        set -euo pipefail
+        cargo binstall --no-confirm --force --locked \
+          --maximum-resolution-timeout 60 --log-level info cargo-nextest just
+        command -v cargo-nextest
+        command -v just
     - name: Set up cargo cache
       uses: Swatinem/rust-cache@v2
       if: github.ref != 'refs/heads/main'
       with:
-        shared-key: "rust-${{ matrix.os }}"
+        # Same array-interpolation bug as the concurrency group above: with
+        # `matrix.os` the three legs shared the key "rust-", so a Windows job
+        # could restore a macOS cache.
+        shared-key: "rust-${{ join(matrix.os, '-') }}"
         save-if: ${{ github.ref == 'refs/heads/main' }}
+    - name: Pin find-msvc-tools below the 0.1.13 semver break
+      shell: bash
+      # `find-msvc-tools` 0.1.13 (published 2026-09-18T13:26Z) changed
+      #
+      #   pub const FILE_ATTRIBUTE_TEMPORARY: FILE_FLAGS_AND_ATTRIBUTES = 256u32;  # 0.1.12
+      #   pub const FILE_ATTRIBUTE_TEMPORARY: i32 = 256;                           # 0.1.13
+      #
+      # That is a breaking type change shipped in a semver-compatible patch.
+      # `cc` 1.2.67 depends on `find-msvc-tools ^0.1.9`, so cargo picks 0.1.13,
+      # and `cc/src/tempfile.rs:33` hands the constant straight to
+      # `OpenOptionsExt::custom_flags(&mut OpenOptions, u32)` with no
+      # conversion. On the Windows leg that is a hard `E0308`:
+      #
+      #   error[E0308]: mismatched types
+      #     --> cc-1.2.67/src/tempfile.rs:33:9
+      #      | ::find_msvc_tools::windows_sys::FILE_ATTRIBUTE_TEMPORARY,
+      #      | ^ expected `u32`, found `i32`
+      #   error: could not compile `cc` (lib) due to 1 previous error
+      #
+      # (run 35419861729, job 105835353427, step `Run MacOS and Windows tests`).
+      # `cc`'s own main has since added `.try_into().unwrap()` there, but that
+      # fix is only on the 1.4.x line and we cannot reach it:
+      # `tree-sitter-sequel 0.3.11` -- the newest release, pulled in by
+      # `freya-code-editor` -- requires `cc ~1.2.1`, i.e. `>=1.2.1, <1.3.0`.
+      # Verified: `cargo update -p cc --precise 1.4.7` fails with
+      # "failed to select a version for the requirement `cc = \"~1.2.1\"`".
+      #
+      # So the lever is the other side of the pair. 0.1.12 is the last release
+      # where the constant is still `u32`, which is what `cc` 1.2.x expects.
+      #
+      # This runs on every leg, not just Windows: `find-msvc-tools` is an
+      # unconditional (not target-gated) dependency of `cc`, so it is in the
+      # resolved graph on Linux and macOS too. Pinning it everywhere keeps the
+      # three legs resolving one identical lockfile; the `#[cfg(windows)]`
+      # arm that consumes the constant is simply not compiled off Windows.
+      #
+      # `Cargo.lock` is gitignored in this repo, so CI resolves fresh on every
+      # run and there is no checked-in lockfile to carry the pin. Remove this
+      # step once `cc` 1.2.x carries the conversion, or once a `find-msvc-tools`
+      # release restores the `u32` type.
+      run: |
+        set -euo pipefail
+        cargo generate-lockfile
+        cargo update -p find-msvc-tools --precise 0.1.12
     - name: Install linux dependencies
       if: runner.os == 'Linux'
-      run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev pkg-config libglib2.0-dev libgtk-3-dev libudev-dev libxdo-dev libwebkit2gtk-4.1-dev
-    - name: Remove unused programs in linux
-      if: runner.os == 'Linux'
-      run: |
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      uses: ./.github/actions/linux-system-deps
     - name: Run Linux tests
       if: runner.os == 'Linux'
       run: |
@@ -59,11 +222,29 @@ jobs:
     - name: Run MacOS and Windows tests
       if: runner.os != 'Linux'
       run: just t
+    # grcov's asset is chosen by `uname -m`, not hardcoded to x86_64. The
+    # Linux lane is aarch64, and the x86_64 tarball is not merely the wrong
+    # download -- these boxes have x86_64 binfmt registered without the
+    # matching loader, so it is dispatched to qemu and dies as
+    #
+    #   x86_64-binfmt-P: Could not open '/lib64/ld-linux-x86-64.so.2'
+    #                                                     (exit 255)
+    #
+    # which is the same trap the Android NDK fell into: on this hardware an
+    # x86_64 binary looks runnable right up until it is run. Everything before
+    # this step passed -- `just t` ran the whole Linux suite green -- so the
+    # only thing this was costing was the coverage upload.
     - name: Run coverage
       if: runner.os == 'Linux'
       run: |
+        set -euo pipefail
         rustup component add llvm-tools-preview
-        curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-x86_64-unknown-linux-gnu.tar.bz2 | tar jxf -
+        case "$(uname -m)" in
+          x86_64)          grcov_target=x86_64-unknown-linux-gnu ;;
+          aarch64|arm64)   grcov_target=aarch64-unknown-linux-gnu ;;
+          *) echo "::error::No grcov release asset for $(uname -m)."; exit 1 ;;
+        esac
+        curl -fsSL "https://github.com/mozilla/grcov/releases/latest/download/grcov-${grcov_target}.tar.bz2" | tar jxf -
         ./grcov . --binary-path ./target/debug/deps -s . -t lcov --branch --ignore-not-existing --ignore "../*" --ignore "/*" -o cov.lcov
     - uses: codecov/codecov-action@v6
       if: runner.os == 'Linux'

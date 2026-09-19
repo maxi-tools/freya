@@ -1,4 +1,7 @@
-use freya_core::prelude::{State, use_try_consume};
+use freya_core::prelude::{
+    State,
+    use_try_consume,
+};
 
 #[derive(Clone)]
 pub struct ActivableRouteContext(pub State<bool>);

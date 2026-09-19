@@ -1,5 +1,10 @@
 use crate::{
-    EmmitableEvent, NameOfEvent, NodeKey, NodesState, NodesStatesUpdate, PotentialEvent,
+    EmmitableEvent,
+    NameOfEvent,
+    NodeKey,
+    NodesState,
+    NodesStatesUpdate,
+    PotentialEvent,
     SourceEvent,
 };
 

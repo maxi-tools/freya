@@ -3,7 +3,10 @@
     windows_subsystem = "windows"
 )]
 
-use freya::{animation::*, prelude::*};
+use freya::{
+    animation::*,
+    prelude::*,
+};
 use freya_performance_plugin::PerformanceOverlayPlugin;
 
 fn main() {

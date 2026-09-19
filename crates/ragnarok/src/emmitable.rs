@@ -1,4 +1,7 @@
-use crate::{NameOfEvent, NodeKey};
+use crate::{
+    NameOfEvent,
+    NodeKey,
+};
 
 pub trait EmmitableEvent: Clone + PartialEq + Eq + Ord {
     type Name: NameOfEvent;

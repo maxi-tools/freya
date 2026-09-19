@@ -1,11 +1,17 @@
 use freya_core::lifecycle::{
-    readable::{IntoReadable, Readable},
+    readable::{
+        IntoReadable,
+        Readable,
+    },
     state::ReadableRef,
 };
 
 use crate::{
     hooks::RadioChannel,
-    slice::{RadioSlice, RadioSliceMut},
+    slice::{
+        RadioSlice,
+        RadioSliceMut,
+    },
 };
 
 pub trait RadioReadable<T: 'static> {

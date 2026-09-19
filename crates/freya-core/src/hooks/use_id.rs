@@ -1,7 +1,12 @@
 use std::marker::PhantomData;
 
 use crate::{
-    prelude::{State, provide_context_for_scope_id, try_consume_context, use_hook},
+    prelude::{
+        State,
+        provide_context_for_scope_id,
+        try_consume_context,
+        use_hook,
+    },
     scope_id::ScopeId,
 };
 

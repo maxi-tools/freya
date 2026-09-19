@@ -26,12 +26,16 @@ jobs:
       - name: Install stable rust toolchain
         uses: dtolnay/rust-toolchain@1.94
       - name: Install linux dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev pkg-config libglib2.0-dev libgtk-3-dev libudev-dev libxdo-dev libwebkit2gtk-4.1-dev
+        uses: ./.github/actions/linux-system-deps
       - name: Set up cargo cache
         uses: Swatinem/rust-cache@v2
         if: github.ref != 'refs/heads/main'
         with:
-          shared-key: "rust-${{ matrix.os }}"
+          # There is no matrix in this job. `${{ matrix.os }}` was copied in
+          # from rust_test.yml and resolved to nothing, so the key was the
+          # bare "rust-", shared with any other job that made the same
+          # mistake.
+          shared-key: "rust-skia-sync-linux-arm64"
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Make sure the mocked Skia bindings are on sync
         run: cargo build --package freya --package freya-testing --features "mocked-engine, all-bindings" --no-default-features

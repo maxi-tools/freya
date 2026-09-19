@@ -2,13 +2,32 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
-use std::{any::Any, borrow::Cow, collections::HashMap, rc::Rc, time::Instant};
+use std::{
+    any::Any,
+    borrow::Cow,
+    collections::HashMap,
+    rc::Rc,
+    time::Instant,
+};
 
-use freya::{prelude::*, text_edit::*};
-use freya_core::integration::{DiffModifies, ElementExt, RenderContext};
+use freya::{
+    prelude::*,
+    text_edit::*,
+};
+use freya_core::integration::{
+    DiffModifies,
+    ElementExt,
+    RenderContext,
+};
 use skia_safe::{
-    Data, Paint, Rect, RuntimeEffect,
-    textlayout::{ParagraphBuilder, ParagraphStyle},
+    Data,
+    Paint,
+    Rect,
+    RuntimeEffect,
+    textlayout::{
+        ParagraphBuilder,
+        ParagraphStyle,
+    },
 };
 
 const SHADER: &str = "

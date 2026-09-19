@@ -3,16 +3,36 @@ use rustc_hash::FxHashMap;
 
 use crate::{
     custom_measurer::LayoutMeasurer,
-    geometry::{Area, Size2D},
+    geometry::{
+        Area,
+        Size2D,
+    },
     node::Node,
     prelude::{
-        AlignAxis, Alignment, AlignmentDirection, AreaConverter, AreaModel, AreaOf, Available,
-        AvailableAreaModel, Content, Direction, Inner, LayoutMetadata, Length, Parent, Position,
+        AlignAxis,
+        Alignment,
+        AlignmentDirection,
+        AreaConverter,
+        AreaModel,
+        AreaOf,
+        Available,
+        AvailableAreaModel,
+        Content,
+        Direction,
+        Inner,
+        LayoutMetadata,
+        Length,
+        Parent,
+        Position,
         Torin,
     },
     size::Size,
     torin::DirtyReason,
-    tree_adapter::{LayoutNode, NodeKey, TreeAdapter},
+    tree_adapter::{
+        LayoutNode,
+        NodeKey,
+        TreeAdapter,
+    },
 };
 
 /// Some layout strategies require two-phase measurements

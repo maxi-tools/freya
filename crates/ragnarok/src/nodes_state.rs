@@ -1,6 +1,16 @@
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{
+    FxHashMap,
+    FxHashSet,
+};
 
-use crate::{EmmitableEvent, EventsMeasurer, NameOfEvent, NodeKey, PotentialEvent, SourceEvent};
+use crate::{
+    EmmitableEvent,
+    EventsMeasurer,
+    NameOfEvent,
+    NodeKey,
+    PotentialEvent,
+    SourceEvent,
+};
 
 /// [`NodesState`] stores the nodes states given incoming events.
 pub struct NodesState<Key: NodeKey> {

@@ -1,5 +1,8 @@
 use freya::helpers::*;
-use freya_core::{integration::*, prelude::*};
+use freya_core::{
+    integration::*,
+    prelude::*,
+};
 use freya_testing::TestingRunner;
 use rustc_hash::FxHashMap;
 use torin::size::Size;

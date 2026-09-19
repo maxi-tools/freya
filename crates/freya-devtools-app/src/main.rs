@@ -1,16 +1,32 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{
+        HashMap,
+        HashSet,
+    },
     sync::Arc,
     time::Duration,
 };
 
-use freya::{prelude::*, radio::*};
+use freya::{
+    prelude::*,
+    radio::*,
+};
 use freya_core::integration::NodeId;
-use freya_devtools::{IncomingMessageAction, OutgoingMessage, OutgoingMessageAction};
+use freya_devtools::{
+    IncomingMessageAction,
+    OutgoingMessage,
+    OutgoingMessageAction,
+};
 use freya_router::prelude::*;
 use futures_util::StreamExt;
-use smol::{Timer, net::TcpStream};
-use state::{DevtoolsChannel, DevtoolsState};
+use smol::{
+    Timer,
+    net::TcpStream,
+};
+use state::{
+    DevtoolsChannel,
+    DevtoolsState,
+};
 
 mod components;
 mod hooks;
@@ -21,7 +37,12 @@ mod tabs;
 
 use hooks::use_node_info;
 use tabs::{
-    computed_layout::computed_layout, layout::*, misc::*, style::*, text_style::*, tree::*,
+    computed_layout::computed_layout,
+    layout::*,
+    misc::*,
+    style::*,
+    text_style::*,
+    tree::*,
 };
 
 fn main() {

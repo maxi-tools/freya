@@ -1,6 +1,12 @@
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{
+    AtomicI32,
+    Ordering,
+};
 
-use freya::{prelude::*, radio::*};
+use freya::{
+    prelude::*,
+    radio::*,
+};
 use freya_testing::prelude::*;
 
 #[derive(Default)]
