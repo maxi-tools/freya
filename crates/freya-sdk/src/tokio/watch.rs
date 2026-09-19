@@ -1,4 +1,8 @@
-use freya_core::prelude::{ReactiveContext, spawn, use_hook};
+use freya_core::prelude::{
+    ReactiveContext,
+    spawn,
+    use_hook,
+};
 use tokio::sync::watch;
 
 /// Subscribe this component to the given [watch::Receiver].

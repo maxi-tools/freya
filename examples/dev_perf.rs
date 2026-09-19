@@ -5,7 +5,10 @@
 use std::time::Instant;
 
 use freya::helpers::from_fn_captured;
-use freya_core::{integration::*, prelude::*};
+use freya_core::{
+    integration::*,
+    prelude::*,
+};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 

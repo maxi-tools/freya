@@ -2,7 +2,10 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
-use freya::{helpers::from_fn_standalone, prelude::*};
+use freya::{
+    helpers::from_fn_standalone,
+    prelude::*,
+};
 use freya_performance_plugin::PerformanceOverlayPlugin;
 
 #[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [90, 95, 99]))]

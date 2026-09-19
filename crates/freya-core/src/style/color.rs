@@ -1,6 +1,11 @@
 use std::ops::Mul;
 
-use freya_engine::prelude::{SkColor, SkColor4f, SkHSV, SkRGB};
+use freya_engine::prelude::{
+    SkColor,
+    SkColor4f,
+    SkHSV,
+    SkRGB,
+};
 
 /// Represents one color.
 /// You may create [Color]s using

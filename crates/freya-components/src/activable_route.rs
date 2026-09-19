@@ -1,5 +1,8 @@
 use freya_core::prelude::*;
-use freya_router::{hooks::use_route, prelude::Routable};
+use freya_router::{
+    hooks::use_route,
+    prelude::Routable,
+};
 
 use crate::activable_route_context::ActivableRouteContext;
 
