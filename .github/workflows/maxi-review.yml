@@ -246,6 +246,15 @@ jobs:
       # records what the resolver found. It is reported every run and never
       # blocks, because only the repository that WROTE it can remove it, and
       # refusing the consumer asks the wrong project to act.
+      #
+      # The merged-state check is BEST EFFORT with the token below, which is
+      # scoped to maxi-config, maxi-libs, maxi-lint and the repository under
+      # review. `compare` on a dependency outside that set 404s, and the gate
+      # says so and allows the pin on its declaration alone rather than
+      # reporting "not on the default branch" for a question it could not ask.
+      # Making it a hard check means widening this token to read the
+      # dependency repositories, which is a permissions decision rather than a
+      # lint one.
       - name: Refuse intra-org dependency pins
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
