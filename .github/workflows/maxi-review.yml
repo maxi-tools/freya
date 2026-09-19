@@ -231,6 +231,30 @@ jobs:
       # Cargo.toml/Cargo.lock files, which is usually none and rarely more
       # than two. A 404 is a file the PR created; any other failure is a
       # lookup this gate must not paper over, so it fails closed.
+      #
+      # A repo whose pin is load-bearing rather than lazy declares it in
+      # `.github/intra-org-pins.tsv` (repo, what-ends-it, why) and stops
+      # needing the `pin-intra-org` label on every PR that touches it. A
+      # declared pin is still refused unless its revision is reachable from the
+      # dependency's default branch -- that is the line between freezing to a
+      # merged state, which a correctness pin needs, and freezing to a side
+      # branch, which is always wrong. The reachability lookup uses GH_TOKEN
+      # below and fails closed.
+      #
+      # An INHERITED pin needs no declaration: it is in Cargo.lock and in no
+      # manifest this project owns, so a dependency pins it and the lock only
+      # records what the resolver found. It is reported every run and never
+      # blocks, because only the repository that WROTE it can remove it, and
+      # refusing the consumer asks the wrong project to act.
+      #
+      # The merged-state check is BEST EFFORT with the token below, which is
+      # scoped to maxi-config, maxi-libs, maxi-lint and the repository under
+      # review. `compare` on a dependency outside that set 404s, and the gate
+      # says so and allows the pin on its declaration alone rather than
+      # reporting "not on the default branch" for a question it could not ask.
+      # Making it a hard check means widening this token to read the
+      # dependency repositories, which is a permissions decision rather than a
+      # lint one.
       - name: Refuse intra-org dependency pins
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
