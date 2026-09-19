@@ -1,17 +1,33 @@
 use std::{
     collections::HashMap,
     ops::Div,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 use async_tungstenite::WebSocketSender;
 use freya_core::{
-    integration::{NodeId, Tree},
-    prelude::{AnimationClock, Color},
+    integration::{
+        NodeId,
+        Tree,
+    },
+    prelude::{
+        AnimationClock,
+        Color,
+    },
 };
-use freya_engine::prelude::{Paint, PaintStyle};
+use freya_engine::prelude::{
+    Paint,
+    PaintStyle,
+};
 use freya_winit::{
-    plugins::{FreyaPlugin, PluginEvent, PluginHandle},
+    plugins::{
+        FreyaPlugin,
+        PluginEvent,
+        PluginHandle,
+    },
     reexports::winit::window::WindowId,
 };
 use smol::net::TcpStream;
@@ -19,7 +35,11 @@ use torin::prelude::Area;
 use tungstenite::Message;
 
 use crate::{
-    NodeState, OutgoingMessage, OutgoingMessageAction, node_info::NodeInfo, server::run_server,
+    NodeState,
+    OutgoingMessage,
+    OutgoingMessageAction,
+    node_info::NodeInfo,
+    server::run_server,
 };
 
 pub(crate) type Websockets = HashMap<u32, WebSocketSender<TcpStream>>;

@@ -2,7 +2,10 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
-use freya::{animation::*, prelude::*};
+use freya::{
+    animation::*,
+    prelude::*,
+};
 
 fn main() {
     launch(LaunchConfig::new().with_window(WindowConfig::new(app)))

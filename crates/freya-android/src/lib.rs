@@ -1,10 +1,20 @@
 #![cfg(target_os = "android")]
 
-use freya_components::theming::{hooks::use_init_theme, themes::light_theme};
-use freya_core::{integration::*, prelude::*};
+use freya_components::theming::{
+    hooks::use_init_theme,
+    themes::light_theme,
+};
+use freya_core::{
+    integration::*,
+    prelude::*,
+};
 use freya_winit::{
     integration::is_ime_role,
-    plugins::{FreyaPlugin, PluginEvent, PluginHandle},
+    plugins::{
+        FreyaPlugin,
+        PluginEvent,
+        PluginHandle,
+    },
 };
 use winit::platform::android::activity::AndroidApp;
 

@@ -5,7 +5,10 @@
 
 use std::path::PathBuf;
 
-use freya::{code_editor::*, prelude::*};
+use freya::{
+    code_editor::*,
+    prelude::*,
+};
 use ropey::Rope;
 
 fn main() {

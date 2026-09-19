@@ -1,6 +1,9 @@
 use std::fmt;
 
-use freya_engine::prelude::{SkPath, SkRRect};
+use freya_engine::prelude::{
+    SkPath,
+    SkRRect,
+};
 use torin::scaled::Scaled;
 
 use crate::prelude::Color;
