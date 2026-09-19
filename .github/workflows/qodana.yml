@@ -102,10 +102,13 @@ jobs:
     # A zero-step failure on the REQUIRED check, for every repo, because of a
     # spending cap unrelated to code.
     #
-    # Linux X64 rather than macOS: the fleet is moving to containerised
+    # Linux rather than macOS: the fleet is moving to containerised
     # execution, which is a Linux story, and it keeps the Macs free for the
     # container scans. Deliberately NOT asking for container-runtime or
-    # tier-fast -- this is trivial work and must not queue behind a scan.
+    # tier-fast -- this is trivial work and must not queue behind a scan --
+    # and not for an arch either: a YAML validation runs the same on the
+    # ARM64 boxes, and 2026-09-18 the X64 pool was 14/14 busy while ARM64
+    # had a slot idle (ci/runner-routing.toml, [lanes.linux-any]).
     #
     # Same-repo PRs only. This job checks out the PR head SHA (below) onto the
     # persistent, non-ephemeral self-hosted Linux fleet, whose workspaces and
@@ -132,7 +135,7 @@ jobs:
         github.event.pull_request.head.repo.full_name == github.repository
       ) &&
       (github.event_name == 'pull_request' || github.event_name == 'push')
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 5
     permissions:
       contents: read
