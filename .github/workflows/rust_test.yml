@@ -75,11 +75,87 @@ jobs:
       uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
       with:
         toolchain: ${{ matrix.toolchain }}
-    - name: Install nextest and just
+    - name: Install cargo-binstall
       shell: bash
+      # Two separate steps, not one. The upstream installer script ends with
+      # `./cargo-binstall --self-install`, and when that succeeds it appends
+      # `$CARGO_HOME/bin` to `$GITHUB_PATH` -- which the runner only applies to
+      # the NEXT step. Piping the script and then calling `cargo binstall` in
+      # the SAME step means the second line runs with the pre-script PATH.
+      #
+      # On Windows that was harmless: `CARGO_HOME` there is
+      # `C:\WINDOWS\system32\config\systemprofile\.cargo`, already on PATH from
+      # the `dtolnay/rust-toolchain` step, so the installer's
+      # `case ":$PATH:" in *":$CARGO_HOME/bin:"*)` arm matched, it skipped the
+      # `$GITHUB_PATH` write, and `cargo binstall` resolved in-step. On Linux
+      # (`/data/ci/peridot-1/.cargo`) and macOS (`/Users/maxi/.cargo`) the arm
+      # did not match, the path was deferred to the next step, and
+      # `cargo binstall` was NOT on PATH.
+      #
+      # `cargo binstall` failing is invisible: cargo prints
+      # `no such command: binstall` to stderr and this step has no `set -e`
+      # guard on that line, so the step exits 0 having installed nothing. The
+      # job then runs for two minutes of `cargo test --doc` and dies at
+      # `cargo nextest run` with `error: no such command: nextest`.
+      #
+      # Measured across the last four `Rust Test` runs on main
+      # (34747187019, 34801140539, 34860026700, 35081767391): exactly the legs
+      # whose `CARGO_HOME/bin` was absent from PATH failed, and WHICH legs
+      # those were tracked the runner, not the code. Run 35081767391 is the
+      # clean demonstration -- Windows green, Linux and macOS both red with
+      # `no such command: nextest`, on a commit that touches only
+      # `maxi-review` workflow files.
       run: |
         curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-        cargo binstall --no-confirm --log-level warn cargo-nextest just
+    - name: Install nextest and just binaries
+      shell: bash
+      env:
+        # Both prebuilt-artifact fetchers query GitHub. Unauthenticated that is
+        # 60 requests/hour shared across every job on the box, and these
+        # self-hosted runners host several repos. Run 35417843468 hit four
+        # `WARN Timeout reached while checking fetcher` lines in one step.
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # `--force` is the load-bearing flag. binstall decides "already
+      # installed" from cargo's install metadata (`$CARGO_HOME/.crates.toml`),
+      # not from the binary's presence on disk. These runners are persistent
+      # and non-ephemeral, and their cleanup hooks reclaim disk between jobs --
+      # the macOS runner logs `[cleanup-job] still under 60 GiB floor (53 GiB)
+      # - aggressive pass`. That deletes binaries under `$CARGO_HOME/bin` and
+      # leaves `.crates.toml` naming them, so binstall no-ops on a toolchain
+      # that is not there.
+      #
+      # Measured on run 35418987264, job 105832967865, Linux leg:
+      #
+      #   cargo-binstall: INFO cargo-nextest v0.9.145 is already installed,
+      #                        use --force to override
+      #   cargo-binstall: INFO just v1.58.0 is already installed,
+      #                        use --force to override
+      #   cargo-binstall: INFO Done in 627.089436ms
+      #   --- binstall exited 0, verifying ---
+      #   ##[error]Process completed with exit code 1
+      #
+      # binstall exited 0 having installed nothing and the very next line,
+      # `command -v cargo-nextest`, found nothing. This is the fault that has
+      # been reported as `error: no such command: nextest` since 1d3be78, and
+      # it is why WHICH matrix leg went red varied run to run: it tracked which
+      # runner had most recently had a cleanup pass, not the code under test.
+      #
+      # `set -euo pipefail` plus the `command -v` assertions are what turned
+      # this from a silent no-op into a red step naming its cause; keep them.
+      #
+      # `--locked` because the source fallback is a hard error for this crate:
+      # cargo-nextest ships a `locked-tripwire` lib whose entire body is a
+      # `compile_error!` reading "Nextest does not support being installed
+      # without --locked" (observed on run 35417843468 after both fetchers
+      # timed out). `--maximum-resolution-timeout 60` (default 15) gives the
+      # prebuilt fetchers headroom on shared hardware so that fallback stays
+      # unreached.
+      run: |
+        set -euo pipefail
+        cargo binstall --no-confirm --force --locked \
+          --maximum-resolution-timeout 60 --log-level info cargo-nextest just
+        command -v cargo-nextest
+        command -v just
     - name: Set up cargo cache
       uses: Swatinem/rust-cache@v2
       if: github.ref != 'refs/heads/main'
@@ -89,6 +165,50 @@ jobs:
         # could restore a macOS cache.
         shared-key: "rust-${{ join(matrix.os, '-') }}"
         save-if: ${{ github.ref == 'refs/heads/main' }}
+    - name: Pin find-msvc-tools below the 0.1.13 semver break
+      shell: bash
+      # `find-msvc-tools` 0.1.13 (published 2026-09-18T13:26Z) changed
+      #
+      #   pub const FILE_ATTRIBUTE_TEMPORARY: FILE_FLAGS_AND_ATTRIBUTES = 256u32;  # 0.1.12
+      #   pub const FILE_ATTRIBUTE_TEMPORARY: i32 = 256;                           # 0.1.13
+      #
+      # That is a breaking type change shipped in a semver-compatible patch.
+      # `cc` 1.2.67 depends on `find-msvc-tools ^0.1.9`, so cargo picks 0.1.13,
+      # and `cc/src/tempfile.rs:33` hands the constant straight to
+      # `OpenOptionsExt::custom_flags(&mut OpenOptions, u32)` with no
+      # conversion. On the Windows leg that is a hard `E0308`:
+      #
+      #   error[E0308]: mismatched types
+      #     --> cc-1.2.67/src/tempfile.rs:33:9
+      #      | ::find_msvc_tools::windows_sys::FILE_ATTRIBUTE_TEMPORARY,
+      #      | ^ expected `u32`, found `i32`
+      #   error: could not compile `cc` (lib) due to 1 previous error
+      #
+      # (run 35419861729, job 105835353427, step `Run MacOS and Windows tests`).
+      # `cc`'s own main has since added `.try_into().unwrap()` there, but that
+      # fix is only on the 1.4.x line and we cannot reach it:
+      # `tree-sitter-sequel 0.3.11` -- the newest release, pulled in by
+      # `freya-code-editor` -- requires `cc ~1.2.1`, i.e. `>=1.2.1, <1.3.0`.
+      # Verified: `cargo update -p cc --precise 1.4.7` fails with
+      # "failed to select a version for the requirement `cc = \"~1.2.1\"`".
+      #
+      # So the lever is the other side of the pair. 0.1.12 is the last release
+      # where the constant is still `u32`, which is what `cc` 1.2.x expects.
+      #
+      # This runs on every leg, not just Windows: `find-msvc-tools` is an
+      # unconditional (not target-gated) dependency of `cc`, so it is in the
+      # resolved graph on Linux and macOS too. Pinning it everywhere keeps the
+      # three legs resolving one identical lockfile; the `#[cfg(windows)]`
+      # arm that consumes the constant is simply not compiled off Windows.
+      #
+      # `Cargo.lock` is gitignored in this repo, so CI resolves fresh on every
+      # run and there is no checked-in lockfile to carry the pin. Remove this
+      # step once `cc` 1.2.x carries the conversion, or once a `find-msvc-tools`
+      # release restores the `u32` type.
+      run: |
+        set -euo pipefail
+        cargo generate-lockfile
+        cargo update -p find-msvc-tools --precise 0.1.12
     - name: Install linux dependencies
       if: runner.os == 'Linux'
       uses: ./.github/actions/linux-system-deps
