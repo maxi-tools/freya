@@ -110,41 +110,50 @@ jobs:
     - name: Install nextest and just binaries
       shell: bash
       env:
-        # Without a token binstall queries the GitHub releases API
-        # unauthenticated, at 60 requests/hour shared across every job on the
-        # box. On the first run of this step both prebuilt-artifact fetchers
-        # timed out at binstall's 15s default -- `WARN Timeout reached while
-        # checking fetcher invalid url` (GhCrateMeta, the releases API) twice
-        # and `... fetcher QuickInstall` twice -- and it fell back to building
-        # from source.
+        # Both prebuilt-artifact fetchers query GitHub. Unauthenticated that is
+        # 60 requests/hour shared across every job on the box, and these
+        # self-hosted runners host several repos. Run 35417843468 hit four
+        # `WARN Timeout reached while checking fetcher` lines in one step.
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # `set -euo pipefail` so a binstall failure fails the step here, at the
-      # point with the diagnostic, instead of two minutes later as a missing
-      # subcommand. The `command -v` assertions turn "installed nothing and
-      # said so quietly" into a red step with the reason.
+      # `--force` is the load-bearing flag. binstall decides "already
+      # installed" from cargo's install metadata (`$CARGO_HOME/.crates.toml`),
+      # not from the binary's presence on disk. These runners are persistent
+      # and non-ephemeral, and their cleanup hooks reclaim disk between jobs --
+      # the macOS runner logs `[cleanup-job] still under 60 GiB floor (53 GiB)
+      # - aggressive pass`. That deletes binaries under `$CARGO_HOME/bin` and
+      # leaves `.crates.toml` naming them, so binstall no-ops on a toolchain
+      # that is not there.
       #
-      # `--locked` because the source fallback is not merely slow, it is a
-      # hard error for this crate: cargo-nextest carries a `locked-tripwire`
-      # lib whose only content is a `compile_error!` reading "Nextest does not
-      # support being installed without --locked". Measured on run
-      # 35417843468 -- both self-hosted legs reached
-      # `error: could not compile 'locked-tripwire'` after ~90s of building.
-      # The authenticated fetchers above should keep us on the prebuilt path;
-      # `--locked` makes the fallback survivable rather than fatal.
+      # Measured on run 35418987264, job 105832967865, Linux leg:
       #
-      # `--maximum-resolution-timeout 60` (default 15) because these runners
-      # are shared and a cold DNS/TLS path to the releases API exceeded 15s
-      # four times in one step on that run.
+      #   cargo-binstall: INFO cargo-nextest v0.9.145 is already installed,
+      #                        use --force to override
+      #   cargo-binstall: INFO just v1.58.0 is already installed,
+      #                        use --force to override
+      #   cargo-binstall: INFO Done in 627.089436ms
+      #   --- binstall exited 0, verifying ---
+      #   ##[error]Process completed with exit code 1
+      #
+      # binstall exited 0 having installed nothing and the very next line,
+      # `command -v cargo-nextest`, found nothing. This is the fault that has
+      # been reported as `error: no such command: nextest` since 1d3be78, and
+      # it is why WHICH matrix leg went red varied run to run: it tracked which
+      # runner had most recently had a cleanup pass, not the code under test.
+      #
+      # `set -euo pipefail` plus the `command -v` assertions are what turned
+      # this from a silent no-op into a red step naming its cause; keep them.
+      #
+      # `--locked` because the source fallback is a hard error for this crate:
+      # cargo-nextest ships a `locked-tripwire` lib whose entire body is a
+      # `compile_error!` reading "Nextest does not support being installed
+      # without --locked" (observed on run 35417843468 after both fetchers
+      # timed out). `--maximum-resolution-timeout 60` (default 15) gives the
+      # prebuilt fetchers headroom on shared hardware so that fallback stays
+      # unreached.
       run: |
         set -euo pipefail
-        echo "PATH=$PATH"
-        echo "CARGO_HOME=${CARGO_HOME:-<unset>}"
-        echo "cargo: $(command -v cargo || echo '<not found>')"
-        echo "cargo-binstall: $(command -v cargo-binstall || echo '<not found>')"
-        echo "--- binstall ---"
-        cargo binstall --no-confirm --locked --maximum-resolution-timeout 60 \
-          --log-level info cargo-nextest just
-        echo "--- binstall exited 0, verifying ---"
+        cargo binstall --no-confirm --force --locked \
+          --maximum-resolution-timeout 60 --log-level info cargo-nextest just
         command -v cargo-nextest
         command -v just
     - name: Set up cargo cache
