@@ -1,4 +1,7 @@
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::Path,
+};
 
 fn main() {
     generate("lucide", "./external/lucide/icons");

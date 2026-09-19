@@ -1,4 +1,10 @@
-use freya_core::prelude::{Component, IntoElement, provide_context, try_consume_context, use_hook};
+use freya_core::prelude::{
+    Component,
+    IntoElement,
+    provide_context,
+    try_consume_context,
+    use_hook,
+};
 
 /// Components that allow the macro to add child routers. This component provides a context
 /// to the child router that maps child routes to root routes and vice versa.

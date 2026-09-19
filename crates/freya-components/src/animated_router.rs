@@ -1,7 +1,10 @@
 use std::marker::PhantomData;
 
 use freya_core::prelude::*;
-use freya_router::prelude::{Routable, use_route};
+use freya_router::prelude::{
+    Routable,
+    use_route,
+};
 
 #[derive(Clone)]
 pub enum AnimatedRouterContext<R: Routable + PartialEq> {

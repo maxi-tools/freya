@@ -1,4 +1,7 @@
-use std::{any::Any, fmt::Debug};
+use std::{
+    any::Any,
+    fmt::Debug,
+};
 
 use cursor_icon::CursorIcon;
 

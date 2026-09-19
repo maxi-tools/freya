@@ -2,7 +2,12 @@ use freya_animation::prelude::*;
 use freya_core::prelude::*;
 use torin::prelude::*;
 
-use crate::{define_theme, get_theme, icons::arrow::ArrowIcon, menu::MenuGroup};
+use crate::{
+    define_theme,
+    get_theme,
+    icons::arrow::ArrowIcon,
+    menu::MenuGroup,
+};
 
 define_theme! {
     %[component]

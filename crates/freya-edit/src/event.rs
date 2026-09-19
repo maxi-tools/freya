@@ -1,12 +1,20 @@
 use std::ops::Mul;
 
-use freya_core::{elements::paragraph::ParagraphHolderInner, prelude::*};
+use freya_core::{
+    elements::paragraph::ParagraphHolderInner,
+    prelude::*,
+};
 use keyboard_types::NamedKey;
 use torin::prelude::CursorPoint;
 
 use crate::{
-    EditableConfig, EditorLine, TextSelection,
-    text_editor::{TextEditor, TextEvent},
+    EditableConfig,
+    EditorLine,
+    TextSelection,
+    text_editor::{
+        TextEditor,
+        TextEvent,
+    },
 };
 
 #[derive(Debug)]

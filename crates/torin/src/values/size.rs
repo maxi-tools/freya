@@ -1,8 +1,16 @@
-use std::{fmt::Debug, hash::Hash, sync::Arc};
+use std::{
+    fmt::Debug,
+    hash::Hash,
+    sync::Arc,
+};
 
 pub use euclid::Rect;
 
-use crate::{geometry::Length, measure::Phase, scaled::Scaled};
+use crate::{
+    geometry::Length,
+    measure::Phase,
+    scaled::Scaled,
+};
 
 pub struct SizeFnContext {
     pub parent: f32,

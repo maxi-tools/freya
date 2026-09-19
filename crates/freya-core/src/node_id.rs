@@ -1,4 +1,8 @@
-use std::{num::NonZeroU64, ops::AddAssign, str::FromStr};
+use std::{
+    num::NonZeroU64,
+    ops::AddAssign,
+    str::FromStr,
+};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, PartialOrd, Ord)]
