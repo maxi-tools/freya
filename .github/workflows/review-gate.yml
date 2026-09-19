@@ -104,16 +104,21 @@ permissions: {}
 
 jobs:
   review-gate:
-    uses: maxi-tools/ci/.github/workflows/review-gate-reusable.yml@d981809791f2d18eabdd7e125c575d60a2289414  # maxi-tools/ci main
-    # `pull-requests: read` is what the gate actually spends: its two paginated
-    # GraphQL queries read this PR's reviews and its review threads to decide
-    # whether any thread is still unresolved. It only reads them — the verdict
-    # is the job's own outcome, not a comment or a label — so write scope would
-    # be strictly more than the gate can use.
+    uses: maxi-tools/ci/.github/workflows/review-gate-reusable.yml@a1287f8bfdd90a480b56514c66004fe53fb8a286  # maxi-tools/ci main (post #15)
+    # `pull-requests: write` is granted here because the `dedupe` job (added
+    # in maxi-tools/ci#9) needs it: it posts a duplicate-of reply and resolves
+    # the thread for review-bot comments that land on the same lines in the
+    # same round, so the gate's unresolved-thread count reflects the
+    # underlying findings rather than multi-bot coverage. The gate job itself
+    # still only reads this PR's reviews and review threads via paginated
+    # GraphQL queries to decide whether any thread is unresolved -- read would
+    # cover that job alone -- but a reusable workflow cannot elevate the token
+    # its caller hands it, so the caller has to grant the union of what every
+    # job in the callee needs, not just what the gate job spends.
     permissions:
       actions: read
       contents: read
-      pull-requests: read
+      pull-requests: write
       # For the `review-gate` commit status the reusable workflow posts. This has to be
       # granted HERE: a reusable workflow cannot elevate the token its caller hands it,
       # so `statuses: write` in review-gate-reusable.yml alone buys nothing -- the POST

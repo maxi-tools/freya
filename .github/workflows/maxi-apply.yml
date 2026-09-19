@@ -72,12 +72,16 @@ jobs:
     if: >
       github.event_name == 'issue_comment' &&
       github.event.issue.pull_request &&
+      github.event.issue.state == 'open' &&
       startsWith(github.event.comment.body, '/maxi apply') &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
     # Was ubuntu-latest. With the org's Actions allowance exhausted, hosted
     # jobs never get a runner assigned, so this command lane silently did
-    # nothing on every invocation. Routed to the self-hosted Linux x64 fleet.
-    runs-on: [self-hosted, Linux, X64]
+    # nothing on every invocation. Routed to the self-hosted Linux fleet --
+    # either arch: gh and a script, nothing here is arch-shaped, and the X64
+    # pool was the org's deepest queue on 2026-09-18 (ci/runner-routing.toml,
+    # [lanes.linux-any]).
+    runs-on: [self-hosted, Linux]
     # Actions cancellation budgets, not a local scheduler model. This lane is
     # triggered by a COMMENT, so without an explicit bound a command that hangs
     # -- a wedged gh call, an unresponsive API -- holds a self-hosted runner at
