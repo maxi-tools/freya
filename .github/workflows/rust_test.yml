@@ -109,13 +109,36 @@ jobs:
         curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
     - name: Install nextest and just binaries
       shell: bash
+      env:
+        # Without a token binstall queries the GitHub releases API
+        # unauthenticated, at 60 requests/hour shared across every job on the
+        # box. On the first run of this step both prebuilt-artifact fetchers
+        # timed out at binstall's 15s default -- `WARN Timeout reached while
+        # checking fetcher invalid url` (GhCrateMeta, the releases API) twice
+        # and `... fetcher QuickInstall` twice -- and it fell back to building
+        # from source.
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # `set -euo pipefail` so a binstall failure fails the step here, at the
       # point with the diagnostic, instead of two minutes later as a missing
       # subcommand. The `command -v` assertions turn "installed nothing and
       # said so quietly" into a red step with the reason.
+      #
+      # `--locked` because the source fallback is not merely slow, it is a
+      # hard error for this crate: cargo-nextest carries a `locked-tripwire`
+      # lib whose only content is a `compile_error!` reading "Nextest does not
+      # support being installed without --locked". Measured on run
+      # 35417843468 -- both self-hosted legs reached
+      # `error: could not compile 'locked-tripwire'` after ~90s of building.
+      # The authenticated fetchers above should keep us on the prebuilt path;
+      # `--locked` makes the fallback survivable rather than fatal.
+      #
+      # `--maximum-resolution-timeout 60` (default 15) because these runners
+      # are shared and a cold DNS/TLS path to the releases API exceeded 15s
+      # four times in one step on that run.
       run: |
         set -euo pipefail
-        cargo binstall --no-confirm --log-level warn cargo-nextest just
+        cargo binstall --no-confirm --locked --maximum-resolution-timeout 60 \
+          --log-level warn cargo-nextest just
         command -v cargo-nextest
         command -v just
     - name: Set up cargo cache
