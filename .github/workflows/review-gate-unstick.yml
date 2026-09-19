@@ -32,14 +32,18 @@
 #
 #   1. the PR has zero unresolved review threads;
 #   2. the latest Review Gate run for the PR's CURRENT head failed;
-#   3. the failure includes a threads job -- not `get-a-non-author-review`.
+#   3. the failure is the threads verdict OR a startup_failure.
 #
 # (3) is what keeps this from spinning. A gate red for want of a review from
 # someone other than the author is not stale, and re-running it would produce
-# the same verdict every half hour forever. Only the thread verdict is
-# re-askable, because only it can have changed without an event.
+# the same verdict every half hour forever. Only the thread verdict and the
+# startup-failure class are re-askable -- the thread verdict because only it
+# can have changed without an event, and the startup-failure class because
+# there is nothing to inspect and re-asking is the only healing action.
 #
-# `run_attempt` is capped as a backstop for anything the three conditions miss.
+# `run_attempt` is capped as a backstop for anything the three conditions miss;
+# without it a permanently-misconfigured caller that always fails to start
+# would loop every 30 minutes.
 name: Review gate unstick
 
 on:
@@ -229,7 +233,19 @@ jobs:
             [ "$run" != "null" ] || continue
 
             conclusion="$(echo "$run" | jq -r '.conclusion // ""')"
-            [ "$conclusion" = "failure" ] || continue
+            # `failure` is the gate verdict we re-ask when its threads
+            # condition turns green. `startup_failure` is the conclusion
+            # GitHub produces when a caller grants a reusable workflow
+            # less scope than its jobs demand: the run ends in ~1s with
+            # ZERO jobs and ZERO logs, the gate never actually ran, and
+            # the next event will queue behind it forever. Re-asking it
+            # is the only healing action -- there is nothing to inspect
+            # -- so it gets the same treatment as a threads failure.
+            # The MAX_ATTEMPTS backstop above bounds the retry.
+            case "$conclusion" in
+              failure|startup_failure) ;;
+              *) continue ;;
+            esac
 
             attempt="$(echo "$run" | jq -r '.attempt // 1')"
             if [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
@@ -237,9 +253,29 @@ jobs:
               continue
             fi
 
-            # (3) the failure is a threads verdict. A gate red for want of a
-            # non-author review is not stale, and re-asking it would spin.
+            # (3) the failure is a threads verdict -- OR the run never started. A
+            # gate red for want of a non-author review is not stale, and re-asking
+            # it would spin; a gate that ended in startup_failure IS the class
+            # this janitor most needs to heal, because a startup_failure has
+            # zero jobs and zero logs by construction (GitHub rejects reusable
+            # workflows whose callers grant them less scope than the jobs
+            # demand). The classifier below would count zero failed thread jobs
+            # and skip it, so the conclusion is the only signal left. The
+            # MAX_ATTEMPTS backstop above is what keeps a permanently-broken
+            # caller from spinning this PR forever.
             id="$(echo "$run" | jq -r '.databaseId')"
+            if [ "$conclusion" = "startup_failure" ]; then
+              echo "PR #$number: gate ended in startup_failure (no jobs, no logs); re-running run $id"
+              if gh run rerun "$id" --repo "$REPO" >/dev/null 2>&1; then
+                rerun=$((rerun + 1))
+              else
+                # Same accounting as below: a re-run that did not happen leaves
+                # the verdict stale, which is the condition this exists to remove.
+                echo "PR #$number: re-run request failed"
+                errors=$((errors + 1))
+              fi
+              continue
+            fi
             # Same trap as above: a failed jobs lookup used to yield empty,
             # default to 0, and read as "not a threads failure" -- so an outage
             # silently declined to re-ask every stale gate while the run still
@@ -282,7 +318,10 @@ jobs:
             echo
             echo "A PR is re-asked only when it has zero unresolved threads, its"
             echo "latest gate run for the current head failed, and that failure"
-            echo "includes a threads job."
+            echo "is either a threads verdict or a startup_failure -- a gate"
+            echo "that never started because the caller granted less scope"
+            echo "than the jobs demand, which has no jobs to inspect and so"
+            echo "is re-asked instead of skipped."
             if [ "$errors" -gt 0 ]; then
               echo
               echo "**$errors pull request(s) could not be examined** because an API"
