@@ -77,9 +77,47 @@ jobs:
         toolchain: ${{ matrix.toolchain }}
     - name: Install nextest and just
       shell: bash
+      # Two separate steps, not one. The upstream installer script ends with
+      # `./cargo-binstall --self-install`, and when that succeeds it appends
+      # `$CARGO_HOME/bin` to `$GITHUB_PATH` -- which the runner only applies to
+      # the NEXT step. Piping the script and then calling `cargo binstall` in
+      # the SAME step means the second line runs with the pre-script PATH.
+      #
+      # On Windows that was harmless: `CARGO_HOME` there is
+      # `C:\WINDOWS\system32\config\systemprofile\.cargo`, already on PATH from
+      # the `dtolnay/rust-toolchain` step, so the installer's
+      # `case ":$PATH:" in *":$CARGO_HOME/bin:"*)` arm matched, it skipped the
+      # `$GITHUB_PATH` write, and `cargo binstall` resolved in-step. On Linux
+      # (`/data/ci/peridot-1/.cargo`) and macOS (`/Users/maxi/.cargo`) the arm
+      # did not match, the path was deferred to the next step, and
+      # `cargo binstall` was NOT on PATH.
+      #
+      # `cargo binstall` failing is invisible: cargo prints
+      # `no such command: binstall` to stderr and this step has no `set -e`
+      # guard on that line, so the step exits 0 having installed nothing. The
+      # job then runs for two minutes of `cargo test --doc` and dies at
+      # `cargo nextest run` with `error: no such command: nextest`.
+      #
+      # Measured across the last four `Rust Test` runs on main
+      # (34747187019, 34801140539, 34860026700, 35081767391): exactly the legs
+      # whose `CARGO_HOME/bin` was absent from PATH failed, and WHICH legs
+      # those were tracked the runner, not the code. Run 35081767391 is the
+      # clean demonstration -- Windows green, Linux and macOS both red with
+      # `no such command: nextest`, on a commit that touches only
+      # `maxi-review` workflow files.
       run: |
         curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+    - name: Install nextest and just binaries
+      shell: bash
+      # `set -euo pipefail` so a binstall failure fails the step here, at the
+      # point with the diagnostic, instead of two minutes later as a missing
+      # subcommand. The `command -v` assertions turn "installed nothing and
+      # said so quietly" into a red step with the reason.
+      run: |
+        set -euo pipefail
         cargo binstall --no-confirm --log-level warn cargo-nextest just
+        command -v cargo-nextest
+        command -v just
     - name: Set up cargo cache
       uses: Swatinem/rust-cache@v2
       if: github.ref != 'refs/heads/main'
