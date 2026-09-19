@@ -772,8 +772,17 @@ jobs:
           # malformed input, which fails the step -- the gate MUST have a
           # roster to consult, so a missing roster is a red build, not a
           # green one with an empty asked list.
+          #
+          # `python3` from PATH, NOT a hard-coded /opt/homebrew/bin/python3.12.
+          # The Homebrew path is the macOS runner's convention, but this lane
+          # also runs on Linux self-hosted runners (pearl-1 et al.) where the
+          # Homebrew tree does not exist. PATH is exported at the top of this
+          # step -- `/opt/homebrew/bin` first for the macOS pool, system paths
+          # second -- so `python3` resolves to the right interpreter on every
+          # runner. The hard-coded path was the cause of every roster-step
+          # failure since the selector first shipped (#728, maxi-config#741).
           roster_json="$RUNNER_TEMP/roster.json"
-          /opt/homebrew/bin/python3.12 \
+          python3 \
             .maxi-config/maxi-review/select-roster.py \
               --files="$files_json" \
               --head-ref="$HEAD_REF" \
