@@ -121,7 +121,12 @@ jobs:
     # to "failure" -- so this gate reported every PR broken without scanning a
     # single line. Same-repository PRs only (the `if` above), so this is org
     # code on the org's own fleet, not fork code.
-    runs-on: [self-hosted, Linux, X64]
+    #
+    # No arch label: the X64 pool was 14/14 busy with 71 queued on 2026-09-18
+    # while ARM64 had a slot idle, and this job's tools (gh, python, cargo
+    # for the pinned maxi-lint install) are present on both pools
+    # (ci/runner-routing.toml, [lanes.linux-any]).
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 10
     permissions:
       contents: read
@@ -534,7 +539,12 @@ jobs:
     # to "failure" -- so this gate reported every PR broken without scanning a
     # single line. Same-repository PRs only (the `if` above), so this is org
     # code on the org's own fleet, not fork code.
-    runs-on: [self-hosted, Linux, X64]
+    #
+    # No arch label: the X64 pool was 14/14 busy with 71 queued on 2026-09-18
+    # while ARM64 had a slot idle, and this job's tools (gh, python, cargo
+    # for the pinned maxi-lint install) are present on both pools
+    # (ci/runner-routing.toml, [lanes.linux-any]).
+    runs-on: [self-hosted, Linux]
     # Must exceed the reviewer step's 40, or the job cap fires first and the
     # step bound — the actual runner-release watchdog — can never take effect.
     # README: "use a step timeout-minutes of at least [hard deadline + cleanup
