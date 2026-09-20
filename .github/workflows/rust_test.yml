@@ -255,7 +255,12 @@ jobs:
         trap 'rm -rf "$grcov_tmp"' EXIT
         grcov_archive="$grcov_tmp/grcov.tar.bz2"
 
-        max_attempts=3
+        # 4 attempts = the first try plus the THREE retries this PR promises,
+        # so the 2s, 4s and 8s backoff all get used. At max_attempts=3 the 8s
+        # branch was unreachable and only two retries ever ran, so the PR
+        # description and the code disagreed about what this does. Caught
+        # independently by CodeRabbit and Codacy on #46.
+        max_attempts=4
         delay=2
         for attempt in $(seq 1 "$max_attempts"); do
           if [ "$attempt" -gt 1 ]; then
