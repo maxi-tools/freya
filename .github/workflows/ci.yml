@@ -32,7 +32,25 @@ permissions: {}
 
 jobs:
   merge-gate:
-    uses: maxi-tools/maxi-config/.github/workflows/rust-ci.yml@main
+    # The PUBLIC mirror, pinned. freya is a public repository and
+    # maxi-tools/maxi-config is private; GitHub will not resolve a `uses:`
+    # from a public repo into a private one. The call simply fails to start:
+    # the run ends in ~1s with ZERO jobs, no logs, and nothing to re-run
+    # (`gh run rerun` answers "This workflow run cannot be retried").
+    #
+    # It is worse than an ordinary red, because GitHub reads a workflow's
+    # `name:` from the default branch and falls back to the PATH when it
+    # cannot resolve the file. This workflow was registered as
+    # `.github/workflows/ci.yml` rather than `CI`, which is the visible tell
+    # that it had never started successfully -- see the API, where `name`
+    # equals `path`.
+    #
+    # maxi-tools/ci exists precisely for this: it is the public mirror of
+    # maxi-config's lane workflows, and `workflows/standard-rust-ci-wrapper.yml`
+    # in maxi-config pins it the same way. The SHA is deliberate, not laziness:
+    # maxi-config's own parity test proves this revision byte-identical to the
+    # canonical copy.
+    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@0b98fc43c21ffd1b11f30bc3d4998eadd3b360d7  # maxi-tools/ci main
     permissions:
       contents: write
       pull-requests: read
