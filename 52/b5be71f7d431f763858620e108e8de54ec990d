@@ -1,0 +1,14 @@
+.github/workflows/rust_test.yml
+  h_cebe5b6d461c32 258-263
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "52b5be71f7d431f763858620e108e8de54ec990d",
+  "prompts": {},
+  "humans": {
+    "h_cebe5b6d461c32": {
+      "author": "Maxi Boch <874012+maxiboch@users.noreply.github.com>"
+    }
+  }
+}
