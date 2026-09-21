@@ -22,7 +22,7 @@ permissions: {}
 
 jobs:
   merge-gate:
-    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@331afa1e5394745e5cc7e25fba67a67605c85012  # maxi-tools/ci main
+    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@4c0f94f503dbb74aa207d9b6d2e92020cb31b2da  # maxi-tools/ci main
     permissions:
       contents: write
       pull-requests: read
