@@ -252,12 +252,19 @@ def live_rows(runs, checks):
     superseded = {
         s for s in ({r.get("check_suite_id") for r in runs} - live_suites) if s is not None
     }
-    # Keyed by app as well as name: two apps can post a check with the same
-    # name, and collapsing them by name alone would let one app's pass hide the
-    # other's failure.
+    # Keyed by app, suite AND name: two apps can post a check with the same
+    # name (Codacy vs review-gate, say), and every GitHub Actions check-run is
+    # posted under the SAME app id, so two check-runs from two DIFFERENT
+    # workflows sharing a job name would otherwise collapse to one. The
+    # superseded filter above already drops rows whose suite a newer run
+    # replaced; widening the key here is for the case neither suite is
+    # superseded -- two live workflows, same name, different conclusions --
+    # where timestamp-newest on the collapsed row could drop a live failure.
     keep_checks = newest(
         [c for c in checks if (c.get("check_suite") or {}).get("id") not in superseded],
-        lambda c: ((c.get("app") or {}).get("id"), c.get("name")),
+        lambda c: ((c.get("app") or {}).get("id"),
+                   (c.get("check_suite") or {}).get("id"),
+                   c.get("name")),
     )
     return keep_runs, keep_checks
 
