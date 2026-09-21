@@ -1,25 +1,15 @@
+# maxi-config-owned standard Rust CI wrapper.
 # Thin standard Rust CI wrapper for maxi-tools repos.
-# Source of truth: maxi-config/workflows/rust-ci.yml
+# Source of truth: maxi-config/.github/workflows/rust-ci.yml
 # Copy to .github/workflows/ci.yml in simple Rust repos that can use the
 # canonical lane policy without repo-local CI customization.
+# Fanned out by scripts/sync-maxi-review.sh; edit it there, not here.
 
 name: CI
 
-# Cancel superseded PR runs, never main's.
-#
-# A superseded PR run was testing a stale merge base that gets re-verified once
-# main is integrated, so dropping it costs nothing. A push to main is the
-# opposite case: `github.ref` is `refs/heads/main` for every merge, so a single
-# shared group meant each merge cancelled the previous merge's verification, and
-# unlike a PR there is no later re-run — that commit has already shipped.
-#
-# This does not guarantee every main commit is tested. The group keeps one
-# running slot and one pending slot, and a newly queued run evicts whatever was
-# pending, so a burst of three or more merges still drops the middle ones. What
-# it does stop is a run that has already started being killed outright.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action) || contains(fromJSON('["run-ci","run-clippy"]'), github.event.label.name)) }}
 
 on:
   push:
@@ -32,7 +22,7 @@ permissions: {}
 
 jobs:
   merge-gate:
-    uses: maxi-tools/maxi-config/.github/workflows/rust-ci.yml@main
+    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@0d09e02af3cd5e90725c1e911514dc6eda07b6e1  # maxi-tools/ci main
     permissions:
       contents: write
       pull-requests: read
@@ -41,4 +31,6 @@ jobs:
       pages: write
     with:
       repo_policy: standard-rust
-    secrets: inherit
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
