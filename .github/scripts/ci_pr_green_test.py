@@ -367,6 +367,51 @@ class AppScopedCheckTest(unittest.TestCase):
         ]
         failures, _p, _s, _hollow, _c = mod.judge(runs, checks, [])
         self.assertEqual(len(failures), 1, "the other app's failure must survive")
+    def test_same_app_same_name_in_two_live_suites_keeps_both(self):
+        # The defect: every GitHub Actions check-run is posted under the SAME
+        # app id. Two check-runs from two DIFFERENT workflows, same job name,
+        # both live -- neither suite is superseded -- used to collapse on
+        # (app_id, name) and keep whichever was newer, discarding the other's
+        # conclusion. With the suite in the key, both survive. SUCCESS is
+        # newer; if the timestamp-newest rule on the collapsed key wins, the
+        # failure is silently dropped and the judge answers GREEN.
+        checks = [
+            # newer, success
+            {"name": "lint", "app": {"id": 15368},
+             "check_suite": {"id": 7001}, "started_at": "2026-09-21T11:00:00Z",
+             "status": "completed", "conclusion": "success", "id": 2001},
+            # older, failure -- must survive
+            {"name": "lint", "app": {"id": 15368},
+             "check_suite": {"id": 7002}, "started_at": "2026-09-21T10:00:00Z",
+             "status": "completed", "conclusion": "failure", "id": 2002},
+        ]
+        failures, _p, _s, _hollow, considered = mod.judge([], checks, [])
+        self.assertEqual(
+            failures, ["lint (check): failure"],
+            "failing row in a different live suite must not be collapsed away",
+        )
+        self.assertEqual(considered, 2,
+                         "both live rows are part of what was judged")
+
+    def test_supersession_still_drops_rows_after_widening_the_key(self):
+        # Widening the group key must NOT resurrect rows the superseded filter
+        # already dropped. A cancelled run replaced by a newer run of the same
+        # workflow -- the suite IS superseded -- must stay out of the verdict.
+        runs = [
+            run(CI, workflow_id=2, suite=800, created=T0,
+                conclusion="cancelled"),
+            run(CI, workflow_id=2, suite=801, created=T1,
+                conclusion="success"),
+        ]
+        # A check run from the superseded suite would, without the filter,
+        # now find its own key and survive. The filter has to remove it first.
+        checks = [
+            check("lint", suite=800, started=T0, conclusion="failure"),
+            check("lint", suite=801, started=T1, conclusion="success"),
+        ]
+        failures, pending, stale, _hollow, _ = mod.judge(runs, checks, [])
+        self.assertEqual((failures, pending, stale), ([], [], []),
+                         "supersession still drops the older suite's rows")
 
 
 class GhTransportTest(unittest.TestCase):
