@@ -244,7 +244,43 @@ jobs:
           aarch64|arm64)   grcov_target=aarch64-unknown-linux-gnu ;;
           *) echo "::error::No grcov release asset for $(uname -m)."; exit 1 ;;
         esac
-        curl -fsSL "https://github.com/mozilla/grcov/releases/latest/download/grcov-${grcov_target}.tar.bz2" | tar jxf -
+
+        # Download grcov to a temp file with retries, then extract separately.
+        # This separates curl failures (DNS, transient network) from tar errors
+        # (corrupt archive) so the step fails with the real cause visible.
+        # Retries handle intermittent infrastructure failures (maxi-core#718)
+        # without requiring a human to re-run the job.
+        grcov_url="https://github.com/mozilla/grcov/releases/latest/download/grcov-${grcov_target}.tar.bz2"
+        grcov_tmp="$(mktemp -d)"
+        trap 'rm -rf "$grcov_tmp"' EXIT
+        grcov_archive="$grcov_tmp/grcov.tar.bz2"
+
+        # 4 attempts = the first try plus the THREE retries this PR promises,
+        # so the 2s, 4s and 8s backoff all get used. At max_attempts=3 the 8s
+        # branch was unreachable and only two retries ever ran, so the PR
+        # description and the code disagreed about what this does. Caught
+        # independently by CodeRabbit and Codacy on #46.
+        max_attempts=4
+        delay=2
+        for attempt in $(seq 1 "$max_attempts"); do
+          if [ "$attempt" -gt 1 ]; then
+            echo "::warning title=Coverage retry::Download failed (attempt $((attempt - 1))/$((max_attempts - 1))), retrying in ${delay}s..."
+            sleep "$delay"
+            delay=$((delay * 2))
+          fi
+          if curl -fsSL "$grcov_url" -o "$grcov_archive"; then
+            echo "::notice title=Coverage::Downloaded grcov on attempt $attempt"
+            break
+          fi
+          if [ "$attempt" -eq "$max_attempts" ]; then
+            echo "::error title=Coverage::Failed to download grcov after $max_attempts attempts: $grcov_url"
+            exit 1
+          fi
+        done
+
+        tar jxf "$grcov_archive"
+        rm -rf "$grcov_tmp"
+        trap - EXIT
         ./grcov . --binary-path ./target/debug/deps -s . -t lcov --branch --ignore-not-existing --ignore "../*" --ignore "/*" -o cov.lcov
     - uses: codecov/codecov-action@v6
       if: runner.os == 'Linux'
