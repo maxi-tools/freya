@@ -607,26 +607,82 @@ runs:
       id: metal-tools
       shell: bash
       run: |
+        # A `.metal` file actually compiles to `.air` is the only honest probe
+        # for whether the toolchain will work in this job. `xcrun metal --version`
+        # is not a valid invocation -- it exits non-zero on every healthy host --
+        # so a check built on it would flag every runner as broken. `xcrun
+        # --find metal` is worse: it returns a path on a freshly-provisioned
+        # host whose download has been silently dropped from xcrun's cache, so
+        # the broken host passes and the lane fails 45 minutes later, deep in a
+        # cargo invocation that does not name the cause.
+        #
+        # Since Xcode 26 the Metal compiler ships as a SEPARATELY DOWNLOADABLE
+        # component (`xcodebuild -downloadComponent MetalToolchain`), not part
+        # of Xcode.app. Release run 35664872199 lost three macOS lanes on a
+        # host that had Xcode 27 but not the component, and 2 of 12 fleet Macs
+        # were unprovisioned on 2026-09-21. This step probes first, downloads
+        # only when the probe fails, and forces xcrun to drop its cache after
+        # the download -- because the download alone leaves xcrun serving the
+        # stale answer that the lane just failed on.
+        #
+        # See the sibling step below for the iOS simulator pattern this was
+        # modelled on.
         METAL_OK=true
         METAL_SUMMARY=""
+        PROBE_DIR=$(mktemp -d -t metal-probe.XXXXXX)
+        trap 'rm -rf "$PROBE_DIR"' EXIT
+        PROBE_FILE="$PROBE_DIR/probe.metal"
+        printf 'kernel void k(){}\n' > "$PROBE_FILE"
 
-        # Metal shader compiler
-        if xcrun --find metal &>/dev/null; then
-          METAL_VER=$(xcrun metal --version 2>&1 | head -1)
-          METAL_SUMMARY="metal compiler: ${METAL_VER}"
-          echo "Metal compiler: $METAL_VER"
+        metal_compile_ok() {
+          # `-c` is "compile to AIR (object)", `-o` is the output. If `metal`
+          # cannot find its toolchain this exits non-zero with the exact
+          # "cannot execute tool 'metal' due to missing Metal Toolchain"
+          # error a Cargo build later produces.
+          xcrun metal -c "$PROBE_FILE" -o "$PROBE_DIR/probe.air" \
+            >/dev/null 2>&1
+        }
+
+        if metal_compile_ok; then
+          echo "Metal shader toolchain: present (compile probe succeeded)"
         else
-          METAL_OK=false
-          echo "::error::xcrun metal not found — Metal shader compilation will fail"
-          echo "  Install Xcode.app (not just CLT) for Metal compiler support"
+          echo "Metal shader toolchain: probe failed — installing MetalToolchain component"
+          # Same `perl alarm` envelope as the iOS simulator step above:
+          # macOS ships no GNU `timeout`, and a missing `timeout` under `if !`
+          # is a silent `|| true` masquerading as a download timeout.
+          if ! perl -e "alarm shift; exec @ARGV" 1800 xcodebuild -downloadComponent MetalToolchain; then
+            echo "::error::xcodebuild -downloadComponent MetalToolchain failed or timed out after 30 minutes. Provision this runner manually: xcodebuild -downloadComponent MetalToolchain && xcrun --kill-cache"
+            exit 1
+          fi
+
+          # The download reports success while xcrun still serves a stale
+          # tool-resolution answer from its cache -- a probe run here would
+          # re-confirm the broken state and the lane would fail in cargo
+          # 45 minutes later. `xcrun --kill-cache` is what unsticks it; no
+          # reboot required. Drop this line and the fix is silently undone.
+          echo "Invalidating xcrun tool-resolution cache after MetalToolchain install"
+          xcrun --kill-cache
+
+          if metal_compile_ok; then
+            echo "Metal shader toolchain: installed and verified by compile"
+          else
+            METAL_OK=false
+            echo "::error::Metal shader toolchain still does not compile a trivial .metal → .air after download + xcrun --kill-cache. Provision this runner manually before any Metal-dependent lane is routed here."
+            # DO NOT exit 0 with a warning here. A silent skip is exactly the
+            # bug this card exists to fix -- it makes the lane fail later, in
+            # a place that does not name the cause. Loud failure at setup time
+            # is the contract.
+            exit 1
+          fi
         fi
 
-        # Metal linker (metallib)
+        # Auxiliary sanity checks. None of these are sufficient on their own
+        # (the compile probe above is the gate), but each one tells operators
+        # which capability is missing when something else goes wrong.
         if xcrun --find metallib &>/dev/null; then
           echo "metallib linker: available"
         else
-          METAL_OK=false
-          echo "::error::xcrun metallib not found — Metal library linking will fail"
+          echo "::warning::xcrun metallib not found — Metal library linking will fail"
         fi
 
         # Metal Performance Shaders framework
@@ -645,6 +701,16 @@ runs:
           METAL_SUMMARY="${METAL_SUMMARY}; GPU: ${METAL_FAMILY}"
         fi
 
+        # Prepend `;` only when METAL_SUMMARY is non-empty, so a healthy
+        # macOS box with no detectable GPU family ends up with
+        # `metal compile probe: ok` rather than `; metal compile probe: ok`
+        # (Codacy). The two strings are concatenated with `; ` as the
+        # separator when both are present.
+        if [ -n "$METAL_SUMMARY" ]; then
+          METAL_SUMMARY="${METAL_SUMMARY}; metal compile probe: ok"
+        else
+          METAL_SUMMARY="metal compile probe: ok"
+        fi
         echo "metal_ok=$METAL_OK" >> $GITHUB_OUTPUT
         echo "metal_summary=$METAL_SUMMARY" >> $GITHUB_OUTPUT
 
