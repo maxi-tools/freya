@@ -46,11 +46,13 @@ jobs:
     # equals `path`.
     #
     # maxi-tools/ci exists precisely for this: it is the public mirror of
-    # maxi-config's lane workflows, and `workflows/standard-rust-ci-wrapper.yml`
-    # in maxi-config pins it the same way. The SHA is deliberate, not laziness:
-    # maxi-config's own parity test proves this revision byte-identical to the
-    # canonical copy.
-    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@0b98fc43c21ffd1b11f30bc3d4998eadd3b360d7  # maxi-tools/ci main
+    # maxi-config's lane workflows. The SHA is ci main at the commit that
+    # carries repo_policy: fork-upstream (ci#54). A fork of upstream does
+    # not run house-style fmt/clippy against code it rebases onto.
+    # checkout_submodules is required: freya-icons' build script reads
+    # crates/freya-icons/external/lucide, which is a submodule. Without it
+    # lane-test dies in the build script before any test runs.
+    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@e5432ccdf91a45c02e461d333db221e11950d47b  # maxi-tools/ci main; fork-upstream (ci#54)
     permissions:
       contents: write
       pull-requests: read
@@ -58,5 +60,6 @@ jobs:
       id-token: write
       pages: write
     with:
-      repo_policy: standard-rust
+      repo_policy: fork-upstream
+      checkout_submodules: true
     secrets: inherit
