@@ -422,9 +422,48 @@ jobs:
       actions: read
     env:
       QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
-      # Qodana CLI honors this name. Repository ID makes ownership explicit on
-      # shared runners and lets entry cleanup target exactly this repo's scan.
-      QODANA_CLI_CONTAINER_NAME: qodana-cli-${{ github.repository_id }}
+      # One name per RUN ATTEMPT, not per repository.
+      #
+      # #348 made this `qodana-cli-<repository_id>` on the reasoning that a
+      # self-hosted runner executes one job at a time, so any container under
+      # that name on entry was residue from a cancelled run and safe to remove.
+      # Both halves of that are wrong on this fleet, and the lane stayed flaky:
+      #
+      #   * `concurrency.group` above is keyed on `github.ref` AND on
+      #     nightly-vs-interactive, so it deliberately does NOT serialise a
+      #     repository's scans. Two pull requests, or the nightly full scan and
+      #     any PR, are separate groups and run at the same time by design.
+      #   * a BOX runs more than one runner: the fleet registers sibling
+      #     runners on one machine under distinct names (see the RUNNER_NAME
+      #     note in the socket probe below), and siblings share one container
+      #     daemon. "One job per runner" never meant one job per daemon.
+      #
+      # So two legitimate scans of the same repository land on one daemon
+      # holding one name, and the loser dies on
+      #
+      #     Conflict. The container name "/qodana-cli-<id>" is already in use
+      #
+      # before analysing a file -- zero findings, no SARIF, and under
+      # CI_ENFORCEMENT_MODE: strict a red REQUIRED check for a pure infra race.
+      # The entry cleanup made it worse rather than better: it force-removed
+      # the name it found, which under sibling runners is a scan that is
+      # running right now, so one repository's two PRs could each kill the
+      # other. Observed on maxi-transport#271, runs 33785239945 -> 33785543203.
+      #
+      # run_id is unique per run and run_attempt distinguishes a re-run of the
+      # same one (a re-run reuses run_id, and its predecessor's container can
+      # still be exiting). Together they are unique across everything that can
+      # share a daemon, so the collision cannot be constructed -- which is the
+      # point: the reaper below is now defence in depth, not the mechanism.
+      QODANA_CLI_CONTAINER_NAME: qodana-cli-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+      # How the reaper recognises a container this workflow created for this
+      # repository. A LABEL, not a name prefix: `docker ps --filter name=` is a
+      # substring match, so reaping `qodana-cli-123*` would also match
+      # repository 1234's live scans. Label equality has no such neighbours.
+      QODANA_CONTAINER_OWNER_LABEL: maxi.qodana.repository-id=${{ github.repository_id }}
+      # The pre-#348-era fixed name, carried only so the first run under this
+      # workflow can clear one left behind by the version it replaced.
+      QODANA_LEGACY_CONTAINER_NAME: qodana-cli-${{ github.repository_id }}
     steps:
       # `always()` on the redaction step below does not cover a runner that dies:
       # when the agent loses contact mid-job -- observed repeatedly on this fleet
@@ -535,50 +574,105 @@ jobs:
           # next reader from checking `ls` and concluding the step is wrong.
           echo "::error::No live container daemon on runner ${RUNNER_NAME:-$(hostname -s)} (checked: ${sockets[*]}; a socket file alone does not count). This runner advertises \`container-runtime\` without a live daemon; run the fleet-label reconcile to revoke it, or restart the runtime on that box."
           exit 1
-      # The Qodana CLI names its container from the project path, so the name
-      # is identical for every run of this repo on a given machine. That is
-      # fine until a run is interrupted: `cancel-in-progress` is on, and a
-      # cancelled scan does not always get its container torn down before the
-      # replacement run starts. When the replacement lands on the SAME runner --
-      # five boxes carry `tier-fast` + `container-runtime`, and the scheduler
-      # gives no round-robin, so it often does -- the CLI dies on
-      # "Conflict. The container name ... is already in use" before analysing a
-      # single file. That is what took this job red on #348.
+      # Reclaim containers a previous run abandoned.
       #
-      # A self-hosted runner executes one job at a time, so any container owned
-      # by this repository on entry—including a running one—is cancelled residue.
-      - name: Clear containers left by a cancelled scan
+      # `docker run --rm` below asks the daemon to auto-remove on exit, and a
+      # cancelled run's container normally finishes its scan and disappears on
+      # its own -- cancellation kills the client, not the container. This step
+      # covers the remainder: a daemon that never completed the auto-remove, a
+      # run whose box was rebooted mid-scan, and the fixed-name containers left
+      # by the workflow version this one replaces.
+      #
+      # THE RULE THIS STEP EXISTS TO OBEY: never touch a scan that is running
+      # now. The previous version force-removed by name on entry, which on a
+      # daemon shared by sibling runners is how one PR killed another PR's
+      # in-flight scan (see QODANA_CLI_CONTAINER_NAME above). Two guards
+      # replace that reasoning, and neither depends on how jobs are scheduled:
+      #
+      #   * age. This job is capped at `timeout-minutes: 30`, so a container a
+      #     live scan owns cannot be older than that. An hour is past any
+      #     possible live scan while still reclaiming the same day.
+      #   * terminal state. A container in `exited` or `dead` is not a scan in
+      #     progress whatever its age, so it is always safe to remove. A
+      #     `created`, `restarting` or `paused` container is NOT -- it falls
+      #     through to the age rule. See the `terminal()` note below.
+      #
+      # Non-fatal throughout. Failing the job because a leftover could not be
+      # removed would manufacture exactly the red required check this whole
+      # change removes -- and it no longer needs to be fatal, because the run's
+      # own container name is unique and does not depend on this step
+      # succeeding.
+      - name: Reclaim containers abandoned by earlier scans
         timeout-minutes: 2
+        continue-on-error: true
         run: |
           set -euo pipefail
-          docker info >/dev/null
-          stale="$(docker ps -a \
-            --filter "name=^/${QODANA_CLI_CONTAINER_NAME}$" \
+
+          # Bounded by the 30-minute job timeout above; see the header.
+          stale_after=3600
+          now="$(date +%s)"
+
+          reap() {
+            echo "reaping $1 ($2)"
+            docker rm -f "$1" >/dev/null 2>&1 ||
+              echo "::warning::could not remove $1; a later run will retry"
+          }
+
+          # TERMINAL, not merely "not running". Docker's Create and Start are
+          # separate lifecycle operations, so between them a sibling's
+          # container is already visible under the owner label with
+          # `State.Running=false` while being seconds old. Reading that as
+          # abandonment force-removes a scan that is starting -- and makes the
+          # other `docker run` fail, which is precisely the red check this
+          # change exists to remove. `created`, `restarting` and `paused` are
+          # therefore NOT reapable on state alone; they fall through to the
+          # age rule like any live container. Only `exited` and `dead` are
+          # states no live scan can be in. An unreadable status is treated as
+          # non-terminal so the age rule decides rather than this one.
+          terminal() {
+            case "$(docker inspect -f '{{.State.Status}}' "$1" 2>/dev/null || echo running)" in
+              exited|dead) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          # Containers this workflow created for this repository, any run.
+          docker ps -a \
+            --filter "label=${QODANA_CONTAINER_OWNER_LABEL}" \
+            --format '{{.Names}} {{.Label "maxi.qodana.started-at"}}' |
+            while read -r name started; do
+              [ -n "$name" ] || continue
+              # This run's own container, if this step is being retried after
+              # the scan already started one.
+              [ "$name" != "$QODANA_CLI_CONTAINER_NAME" ] || continue
+
+              case "$started" in
+                ''|*[!0-9]*)
+                  # No usable start stamp, so the age rule cannot apply.
+                  terminal "$name" && reap "$name" "terminal, no start stamp"
+                  continue
+                  ;;
+              esac
+
+              age=$(( now - started ))
+              if [ "$age" -ge "$stale_after" ] || terminal "$name"; then
+                reap "$name" "abandoned, ${age}s old"
+              else
+                echo "leaving $name: ${age}s old and not terminal, so it may be a live scan"
+              fi
+            done
+
+          # The fixed name from before this workflow gave each run its own.
+          # Exact match, and only when terminal: a container still starting or
+          # running under that name belongs to a scan launched by the previous
+          # workflow version, which is a live scan, and it cannot collide with
+          # this run's unique name anyway.
+          legacy="$(docker ps -a \
+            --filter "name=^/${QODANA_LEGACY_CONTAINER_NAME}$" \
             --format '{{.Names}}')"
-          if [ -z "$stale" ]; then
-            echo "no stale qodana containers on $(hostname -s)"
-            exit 0
+          if [ -n "$legacy" ] && terminal "$legacy"; then
+            reap "$legacy" "terminal container from the pre-unique-name workflow"
           fi
-          while read -r name; do
-            [ -n "$name" ] || continue
-            if [ "$name" != "$QODANA_CLI_CONTAINER_NAME" ]; then
-              echo "::error::Docker returned an unexpected container: $name"
-              exit 1
-            fi
-            echo "removing stale container: $name"
-            if ! docker rm -f "$name" >/dev/null 2>&1; then
-              if ! remaining="$(docker ps -a \
-                --filter "name=^/${name}$" \
-                --format '{{.Names}}')"; then
-                echo "::error::Could not verify removal of stale Qodana container: $name"
-                exit 1
-              fi
-              if [ -n "$remaining" ]; then
-                echo "::error::Could not remove stale Qodana container: $name"
-                exit 1
-              fi
-            fi
-          done <<< "$stale"
 
       # Fail loudly. The old workflow made every failure path non-fatal --
       # continue-on-error, `|| echo`, and an `if:` that skipped the upload when
@@ -639,6 +733,192 @@ jobs:
           # Qodana needs full history to diff a PR against its base.
           fetch-depth: 0
           persist-credentials: false
+
+      # PATH DEPENDENCIES THAT LEAVE THIS REPOSITORY. `cargo fetch` in the
+      # bootstrap resolves `path = "../<repo>/..."` against the container's
+      # /data/project, so ../<repo> is /data/<repo>. The checkout above is the
+      # only tree this job mounts, and a missing sibling is not an unresolved
+      # reference Qodana can report: cargo exits 101 before a SARIF exists
+      # (maxi-warp-bridge runs 36224828291 and 36225514617, `failed to read
+      # /data/maxi-mux/crates/maxi-mux-ipc/Cargo.toml`). Git dependencies are
+      # a different problem and already handled below -- this step is only for
+      # a path that normalises outside the repository.
+      #
+      # Discovery is the manifests, not a rendered list. This file is copied
+      # byte-for-byte into every consumer, and each consumer's sibling set is
+      # different (maxi-warp-bridge wants maxi-mux; maxi-android-bridge and
+      # maxi-stackchan want maxi-transport; maxi-corpus-scrape wants maxi-ml).
+      # A list derived from one repo would leave the others fetching a path
+      # that is not there, which is the failure this step exists to stop.
+      # Repos whose every `path =` stays inside the tree discover nothing and
+      # check nothing out.
+      #
+      # The revision is the sibling's default branch, not a pin. A path
+      # dependency has no rev of its own -- the CI lane beside this one
+      # (maxi-warp-bridge's `cargo check against maxi-mux main`) checks out
+      # the sibling the same way -- so the scan measures the same graph the
+      # build lane builds. Pinning a SHA here would make the two lanes
+      # disagree, and a green scan of a graph cargo will not build is the
+      # empty measurement #557 was written to refuse.
+      #
+      # Checked out BESIDE the workspace, never inside it. A sibling inside
+      # $GITHUB_WORKSPACE would be analysed as this repository's source and
+      # would be visible to a PR's own bootstrap. The mount below binds each
+      # checkout read-only at /data/<name>, which is exactly where
+      # /data/project/../<name> resolves, and nowhere the analyser indexes.
+      #
+      # The token is the org App token minted above (`permission-contents:
+      # read`, no `repositories:` list -- see that step for why the reach
+      # stays org-wide). gh reads GH_TOKEN; the value is never written into
+      # the sibling tree. `gh repo clone` still records the authenticated URL
+      # in .git/config, so that file is deleted before the tree is mounted,
+      # and the mount is read-only so a bootstrap cannot read a credential
+      # back out of a sibling it can see.
+      - name: Check out sibling path dependencies
+        id: siblings
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          discover="$RUNNER_TEMP/qodana-sibling-discover.py"
+          cat > "$discover" <<'PY'
+          import os, pathlib, sys, tomllib
+
+          root = pathlib.Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          org = os.environ["GITHUB_REPOSITORY_OWNER"]
+          skip = {
+              ".git", "target", ".worktrees", ".maxi-worktrees",
+              "node_modules", "vendor",
+          }
+          siblings = {}
+          for dirpath, dirnames, filenames in os.walk(root):
+              dirnames[:] = [d for d in dirnames if d not in skip and not d.startswith(".")]
+              if "Cargo.toml" not in filenames:
+                  continue
+              manifest = pathlib.Path(dirpath) / "Cargo.toml"
+              try:
+                  doc = tomllib.loads(manifest.read_text(encoding="utf-8", errors="replace"))
+              except (OSError, tomllib.TOMLDecodeError) as exc:
+                  print(f"::error::cannot read {manifest}: {exc}", file=sys.stderr)
+                  sys.exit(1)
+              paths = []
+
+              def walk(node):
+                  if isinstance(node, dict):
+                      raw = node.get("path")
+                      if isinstance(raw, str):
+                          paths.append(raw)
+                      for value in node.values():
+                          walk(value)
+                  elif isinstance(node, list):
+                      for value in node:
+                          walk(value)
+
+              walk(doc)
+              for raw in paths:
+                  if not raw.startswith(".."):
+                      continue
+                  resolved = (manifest.parent / raw).resolve()
+                  try:
+                      resolved.relative_to(root)
+                      continue
+                  except ValueError:
+                      pass
+                  # /data/project/../<name> is /data/<name>. pathlib.resolve()
+                  # drops the `..`, so the sibling is the first component of
+                  # the resolved path that is not a component of the
+                  # repository. os.path.relpath keeps the `..` and would name
+                  # the sibling `..`, which is why this does not use it.
+                  root_parts = root.parts
+                  parts = resolved.parts
+                  if parts[:len(root_parts)] == root_parts:
+                      continue
+                  if parts[:len(root_parts) - 1] != root_parts[:-1]:
+                      print(
+                          f"::error::{manifest.relative_to(root)} path {raw} "
+                          f"escapes to {resolved}, which is not a sibling checkout",
+                          file=sys.stderr,
+                      )
+                      sys.exit(1)
+                  name = parts[len(root_parts) - 1]
+                  siblings.setdefault(name, set()).add(str(manifest.relative_to(root)))
+          for name in sorted(siblings):
+              where = ", ".join(sorted(siblings[name]))
+              # stdout is the machine-readable list the shell clones. The
+              # human-readable line goes to stderr so a log line can never
+              # become a repository name.
+              print(f"sibling: {org}/{name} (from {where})", file=sys.stderr)
+              print(name)
+          PY
+          # Process substitution does not fail the step: bash does not apply
+          # set -e to a command whose output is only redirected, so a discover
+          # script that exits 1 would hand mapfile an empty stream and this
+          # step would report "no path dependency" for a tree it could not
+          # read. Write the names first; a non-zero status aborts here.
+          names_file="$RUNNER_TEMP/qodana-sibling-names"
+          python3 "$discover" > "$names_file"
+          mapfile -t names < "$names_file"
+          dest_root="$RUNNER_TEMP/qodana-siblings"
+          rm -rf "$dest_root"
+          mkdir -p "$dest_root"
+          if [ "${#names[@]}" -eq 0 ]; then
+              echo "no path dependency leaves this repository"
+              echo "mount_file=" >> "$GITHUB_OUTPUT"
+              exit 0
+          fi
+          # One argument per line. A multiline step output cannot be spliced
+          # into `docker run` as one word without the shell splitting it, and
+          # splitting it is exactly what has to happen -- each --volume is its
+          # own argv. The file is the split; nothing here is eval'd.
+          mount_file="$RUNNER_TEMP/qodana-sibling-mounts"
+          : > "$mount_file"
+          for name in "${names[@]}"; do
+              # A sibling repo name is a GitHub repository name. Reject
+              # anything else before it is interpolated into a path or a
+              # clone URL. A case pattern that spells a quote or a ${ is
+              # itself an actionlint failure (SC1003, SC2016), so the check
+              # is a character class instead.
+              case "$name" in
+                *[!A-Za-z0-9_.-]*)
+                  echo "::error::refusing sibling checkout name: ${name}"
+                  exit 1
+                  ;;
+              esac
+              case "$name" in
+                ""|.*|-*|_*|*..*)
+                  echo "::error::refusing sibling checkout name: ${name}"
+                  exit 1
+                  ;;
+              esac
+              dest="$dest_root/$name"
+              echo "checking out ${GITHUB_REPOSITORY_OWNER}/$name -> $dest"
+              gh repo clone "${GITHUB_REPOSITORY_OWNER}/$name" "$dest" -- --depth=1
+              if [ ! -s "$dest/Cargo.toml" ] && [ -z "$(find "$dest" -name Cargo.toml -print -quit)" ]; then
+                  echo "::error::checked out ${GITHUB_REPOSITORY_OWNER}/$name but it has no Cargo.toml"
+                  exit 1
+              fi
+              # The clone URL carried the token. Drop it before the tree is
+              # mounted where the scan -- and the repo's own bootstrap -- can
+              # see the directory, even read-only.
+              rm -f "$dest/.git/config"
+              # grep in an `if` does not fail the step on a read error, and a
+              # read error is the case that must not be treated as "no token
+              # found". Capture the status; only 1 means the tree is clean.
+              set +e
+              grep -R -l -e "x-access-token" -e "ghs_" "$dest/.git" >/dev/null 2>&1
+              grep_status=$?
+              set -e
+              if [ "$grep_status" -gt 1 ]; then
+                  echo "::error::could not inspect $name/.git for a leftover token (grep exit $grep_status)"
+                  exit 1
+              fi
+              if [ "$grep_status" -eq 0 ]; then
+                  echo "::error::$name still contains an authenticated URL after dropping .git/config"
+                  exit 1
+              fi
+              printf '%s\n' "--volume" "$dest:/data/$name:ro" >> "$mount_file"
+          done
+          echo "mount_file=$mount_file" >> "$GITHUB_OUTPUT"
 
       # The bootstrap is EXECUTED, as the runner user, on a non-ephemeral
       # machine, with QODANA_TOKEN in the environment and an org App token about
@@ -915,12 +1195,19 @@ jobs:
       - name: Verify the Qodana container can see the checkout
         if: steps.relevant.outputs.scan == 'true'
         shell: bash
+        env:
+          SIBLING_MOUNT_FILE: ${{ steps.siblings.outputs.mount_file }}
         run: |
           set -euo pipefail
           test -s "$GITHUB_WORKSPACE/qodana.yaml"
+          mount_args=()
+          if [ -n "${SIBLING_MOUNT_FILE:-}" ] && [ -f "$SIBLING_MOUNT_FILE" ]; then
+            mapfile -t mount_args < "$SIBLING_MOUNT_FILE"
+          fi
           docker run --rm \
             --entrypoint /bin/sh \
             --volume "$GITHUB_WORKSPACE:/data/project:ro" \
+            "${mount_args[@]}" \
             "$QODANA_IMAGE" \
             -c 'test -s /data/project/qodana.yaml'
 
@@ -1052,6 +1339,8 @@ jobs:
         id: scan
         if: steps.relevant.outputs.scan == 'true'
         shell: bash
+        env:
+          SIBLING_MOUNT_FILE: ${{ steps.siblings.outputs.mount_file }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/qodana/results" "$RUNNER_TEMP/qodana/caches"
@@ -1271,10 +1560,31 @@ jobs:
           # this output. `set -o pipefail` is already in force, so the pipe
           # does not swallow a failing scan. 2>&1 because rustup and cargo
           # write their failures to stderr.
+          #
+          # The two labels are what the reaper above matches on: the owner
+          # label identifies the container as this repository's without the
+          # prefix ambiguity a name match would have, and the start stamp is
+          # what lets the reaper tell an abandoned container from a scan that
+          # is running right now. Recorded here, as an integer epoch, because
+          # deriving an age from `{{.CreatedAt}}` would need a date parser and
+          # the fleet spans BSD and GNU `date`.
+          # Sibling path checkouts, when this repo has any. The path arrives as
+          # an environment variable rather than an interpolation into this
+          # script: a step output spliced into a `run:` block is an injection
+          # into the code that runs, and this block is the one that starts the
+          # container. Absent or missing file is the no-mount case -- a repo
+          # whose every path dependency stays inside the tree.
+          sibling_mounts=()
+          if [ -n "${SIBLING_MOUNT_FILE:-}" ] && [ -f "$SIBLING_MOUNT_FILE" ]; then
+            mapfile -t sibling_mounts < "$SIBLING_MOUNT_FILE"
+          fi
           docker run --rm \
             --name "$QODANA_CLI_CONTAINER_NAME" \
+            --label "$QODANA_CONTAINER_OWNER_LABEL" \
+            --label "maxi.qodana.started-at=$(date +%s)" \
             --user "$(id -u):$(id -g)" \
             --volume "$GITHUB_WORKSPACE:/data/project" \
+            "${sibling_mounts[@]}" \
             --volume "$RUNNER_TEMP/qodana/results:/data/results" \
             --volume "$RUNNER_TEMP/qodana/caches:/data/cache" \
             --env QODANA_TOKEN \
@@ -1285,6 +1595,33 @@ jobs:
             "${docker_env[@]}" \
             "$QODANA_IMAGE" \
             "${qodana_args[@]}" 2>&1 | tee "$RUNNER_TEMP/qodana/scan.log"
+
+      # Close the leak at its source rather than waiting for the next run to
+      # reap it. `always()` covers cancellation, which is the case that matters:
+      # `cancel-in-progress` is on, a superseded run's step process is killed,
+      # and the container it started keeps running on a shared box until its
+      # scan happens to finish. Stopping it here returns the CPU to the fleet
+      # immediately.
+      #
+      # Removes this run's OWN name and nothing else, so it needs none of the
+      # reaper's age reasoning to be safe -- that name is unique to this run
+      # attempt by construction. Best effort: the container has usually already
+      # auto-removed via `--rm`, and a cancelled job's grace period is not
+      # guaranteed to reach this step at all, so a failure here must not
+      # colour the result.
+      - name: Stop this run's container
+        if: always()
+        timeout-minutes: 2
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          if [ -n "$(docker ps -aq --filter "name=^/${QODANA_CLI_CONTAINER_NAME}$" 2>/dev/null)" ]; then
+            echo "removing this run's container: $QODANA_CLI_CONTAINER_NAME"
+            docker rm -f "$QODANA_CLI_CONTAINER_NAME" >/dev/null 2>&1 ||
+              echo "::warning::could not remove $QODANA_CLI_CONTAINER_NAME; the reaper will collect it"
+          else
+            echo "nothing to remove: --rm already collected $QODANA_CLI_CONTAINER_NAME"
+          fi
 
       # THE ONE FAILURE MODE THIS LANE COULD NOT EXPLAIN. When the scan dies
       # before writing SARIF, `qodana scan` prints
@@ -1647,7 +1984,13 @@ jobs:
 
       - name: Redact container credentials
         if: always()
-        run: rm -rf .qodana
+        run: |
+          rm -rf .qodana
+          # Sibling checkouts live outside the workspace, and their .git was
+          # already stripped of the clone URL. Remove the trees anyway: a
+          # persistent runner reuses $RUNNER_TEMP, and a later job on this box
+          # has no business inheriting another repository's source.
+          rm -rf "$RUNNER_TEMP/qodana-siblings"
 
       # NO continue-on-error, and that is a deliberate reversal. It used to
       # carry one, and this is what that bought: on 2026-09-04
