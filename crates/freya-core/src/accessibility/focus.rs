@@ -1,12 +1,28 @@
-use keyboard_types::{Key, Modifiers, NamedKey};
+use keyboard_types::{
+    Key,
+    Modifiers,
+    NamedKey,
+};
 
 use crate::{
     accessibility::id::AccessibilityId,
-    integration::{ACCESSIBILITY_ROOT_ID, AccessibilityGenerator},
-    platform::{NavigationMode, Platform},
+    integration::{
+        ACCESSIBILITY_ROOT_ID,
+        AccessibilityGenerator,
+    },
+    platform::{
+        NavigationMode,
+        Platform,
+    },
     prelude::{
-        AccessibilityFocusStrategy, KeyboardEventData, Memo, ScreenReader, UserEvent,
-        consume_root_context, use_hook, use_memo,
+        AccessibilityFocusStrategy,
+        KeyboardEventData,
+        Memo,
+        ScreenReader,
+        UserEvent,
+        consume_root_context,
+        use_hook,
+        use_memo,
     },
 };
 

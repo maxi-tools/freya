@@ -1,25 +1,55 @@
-use std::{any::Any, borrow::Cow, cell::RefCell, rc::Rc};
+use std::{
+    any::Any,
+    borrow::Cow,
+    cell::RefCell,
+    rc::Rc,
+};
 
 use freya_core::{
-    data::{AccessibilityData, LayoutData},
+    data::{
+        AccessibilityData,
+        LayoutData,
+    },
     diff_key::DiffKey,
-    element::{Element, ElementExt, EventHandlerType, LayoutContext, RenderContext},
+    element::{
+        Element,
+        ElementExt,
+        EventHandlerType,
+        LayoutContext,
+        RenderContext,
+    },
     events::name::EventName,
     fifo_cache::FifoCache,
     prelude::*,
     tree::DiffModifies,
 };
 use freya_engine::prelude::{
-    Canvas, Font, FontEdging, FontHinting, FontStyle, Paint, PaintStyle, ParagraphBuilder,
-    ParagraphStyle, SkRect, TextBlob, TextStyle,
+    Canvas,
+    Font,
+    FontEdging,
+    FontHinting,
+    FontStyle,
+    Paint,
+    PaintStyle,
+    ParagraphBuilder,
+    ParagraphStyle,
+    SkRect,
+    TextBlob,
+    TextStyle,
 };
 use rustc_hash::FxHashMap;
-use torin::prelude::{Area, Size2D};
+use torin::prelude::{
+    Area,
+    Size2D,
+};
 
 use crate::{
     colors::map_vt100_color,
     handle::TerminalHandle,
-    rendering::{CachedRow, TextRenderer},
+    rendering::{
+        CachedRow,
+        TextRenderer,
+    },
 };
 
 /// Cached layout measurements and font for text drawing.

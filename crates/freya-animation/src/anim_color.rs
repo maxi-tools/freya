@@ -3,8 +3,16 @@ use std::time::Duration;
 use freya_core::prelude::Color;
 
 use crate::{
-    easing::{Function, apply_value},
-    hook::{AnimDirection, AnimatedValue, Ease, ReadAnimatedValue},
+    easing::{
+        Function,
+        apply_value,
+    },
+    hook::{
+        AnimDirection,
+        AnimatedValue,
+        Ease,
+        ReadAnimatedValue,
+    },
 };
 
 /// Animate a color.

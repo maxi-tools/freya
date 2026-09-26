@@ -2,7 +2,10 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Path;
 
-use crate::nest::{Nest, NestId};
+use crate::nest::{
+    Nest,
+    NestId,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LayoutId(pub usize);

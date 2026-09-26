@@ -1,4 +1,7 @@
-use std::{hash::Hash, rc::Rc};
+use std::{
+    hash::Hash,
+    rc::Rc,
+};
 #[derive(PartialEq, Hash, Eq, Clone, Debug, Default)]
 pub enum DiffKey {
     Root,

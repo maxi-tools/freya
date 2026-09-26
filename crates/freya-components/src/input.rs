@@ -1,6 +1,9 @@
 use std::{
     borrow::Cow,
-    cell::{Ref, RefCell},
+    cell::{
+        Ref,
+        RefCell,
+    },
     rc::Rc,
 };
 
@@ -8,11 +11,21 @@ use freya_core::prelude::*;
 use freya_edit::*;
 use torin::{
     gaps::Gaps,
-    prelude::{Alignment, Area, Content, Direction},
+    prelude::{
+        Alignment,
+        Area,
+        Content,
+        Direction,
+    },
     size::Size,
 };
 
-use crate::{cursor_blink::use_cursor_blink, define_theme, get_theme, scrollviews::ScrollView};
+use crate::{
+    cursor_blink::use_cursor_blink,
+    define_theme,
+    get_theme,
+    scrollviews::ScrollView,
+};
 
 define_theme! {
     for = Input;

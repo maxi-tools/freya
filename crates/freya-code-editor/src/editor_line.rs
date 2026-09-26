@@ -1,10 +1,22 @@
 use std::borrow::Cow;
 
 use freya_core::prelude::*;
-use freya_edit::{EditableEvent, EditorLine, TextEditor};
-use torin::{gaps::Gaps, prelude::Alignment, size::Size};
+use freya_edit::{
+    EditableEvent,
+    EditorLine,
+    TextEditor,
+};
+use torin::{
+    gaps::Gaps,
+    prelude::Alignment,
+    size::Size,
+};
 
-use crate::{editor_data::CodeEditorData, editor_theme::EditorTheme, syntax::TextNode};
+use crate::{
+    editor_data::CodeEditorData,
+    editor_theme::EditorTheme,
+    syntax::TextNode,
+};
 
 #[derive(Clone, PartialEq)]
 pub struct EditorLineUI {

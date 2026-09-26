@@ -1,4 +1,7 @@
-use crate::{CursorPoint, NameOfEvent};
+use crate::{
+    CursorPoint,
+    NameOfEvent,
+};
 
 pub trait SourceEvent: Clone + PartialEq {
     type Name: NameOfEvent;

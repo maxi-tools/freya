@@ -1,7 +1,10 @@
 use freya_core::prelude::*;
 use torin::gaps::Gaps;
 
-use crate::{define_theme, get_theme};
+use crate::{
+    define_theme,
+    get_theme,
+};
 
 define_theme! {
     for = Card;

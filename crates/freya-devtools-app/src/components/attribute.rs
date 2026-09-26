@@ -2,7 +2,12 @@ use freya::prelude::*;
 use freya_devtools::AttributeType;
 
 use crate::property::{
-    BorderProperty, ColorProperty, GradientProperty, Property, ShadowProperty, TextShadowProperty,
+    BorderProperty,
+    ColorProperty,
+    GradientProperty,
+    Property,
+    ShadowProperty,
+    TextShadowProperty,
 };
 
 pub fn attributes_list(attributes: Vec<(&str, AttributeType)>) -> Element {
