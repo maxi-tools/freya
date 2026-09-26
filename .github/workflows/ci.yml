@@ -46,13 +46,17 @@ jobs:
     # equals `path`.
     #
     # maxi-tools/ci exists precisely for this: it is the public mirror of
-    # maxi-config's lane workflows. The SHA is ci main at the commit that
-    # carries repo_policy: fork-upstream (ci#54). A fork of upstream does
-    # not run house-style fmt/clippy against code it rebases onto.
+    # maxi-config's lane workflows. The SHA is ci main at e8a4eec (ci#55),
+    # which carries repo_policy: fork-upstream (ci#54) AND names the public
+    # fetch-policy action. ci#54's pin still called
+    # maxi-tools/maxi-config/.github/actions/fetch-policy, which a public
+    # repo cannot resolve, so the lane died at job setup. A fork of
+    # upstream does not run house-style fmt/clippy against code it rebases
+    # onto.
     # checkout_submodules is required: freya-icons' build script reads
     # crates/freya-icons/external/lucide, which is a submodule. Without it
     # lane-test dies in the build script before any test runs.
-    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@e5432ccdf91a45c02e461d333db221e11950d47b  # maxi-tools/ci main; fork-upstream (ci#54)
+    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@e8a4eec2da9caa3f89d4aa05f62a1c7d016f9ecb  # maxi-tools/ci main; public fetch-policy (ci#55)
     permissions:
       contents: write
       pull-requests: read
