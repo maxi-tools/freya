@@ -22,7 +22,7 @@ permissions: {}
 
 jobs:
   merge-gate:
-    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@4c0f94f503dbb74aa207d9b6d2e92020cb31b2da  # maxi-tools/ci main
+    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@e8a4eec2da9caa3f89d4aa05f62a1c7d016f9ecb  # maxi-tools/ci main; fork-upstream (ci#54) and public fetch-policy (ci#55)
     permissions:
       contents: write
       pull-requests: read
@@ -30,7 +30,8 @@ jobs:
       id-token: write
       pages: write
     with:
-      repo_policy: standard-rust
+      repo_policy: fork-upstream
+      checkout_submodules: true
     secrets:
       APP_ID: ${{ secrets.APP_ID }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
