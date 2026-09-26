@@ -66,4 +66,6 @@ jobs:
     with:
       repo_policy: fork-upstream
       checkout_submodules: true
-    secrets: inherit
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
