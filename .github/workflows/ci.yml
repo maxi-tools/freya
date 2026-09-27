@@ -22,7 +22,7 @@ permissions: {}
 
 jobs:
   merge-gate:
-    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@e8a4eec2da9caa3f89d4aa05f62a1c7d016f9ecb  # maxi-tools/ci main; fork-upstream (ci#54) and public fetch-policy (ci#55)
+    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@14f387b4144a783899e91c5f4a2da83b315560bb  # maxi-tools/ci main; sibling path-dep verify-sibling-checkouts (ci#69); target deps + cleanup
     permissions:
       contents: write
       pull-requests: read
