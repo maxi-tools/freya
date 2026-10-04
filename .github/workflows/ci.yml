@@ -32,7 +32,31 @@ permissions: {}
 
 jobs:
   merge-gate:
-    uses: maxi-tools/maxi-config/.github/workflows/rust-ci.yml@main
+    # The PUBLIC mirror, pinned. freya is a public repository and
+    # maxi-tools/maxi-config is private; GitHub will not resolve a `uses:`
+    # from a public repo into a private one. The call simply fails to start:
+    # the run ends in ~1s with ZERO jobs, no logs, and nothing to re-run
+    # (`gh run rerun` answers "This workflow run cannot be retried").
+    #
+    # It is worse than an ordinary red, because GitHub reads a workflow's
+    # `name:` from the default branch and falls back to the PATH when it
+    # cannot resolve the file. This workflow was registered as
+    # `.github/workflows/ci.yml` rather than `CI`, which is the visible tell
+    # that it had never started successfully -- see the API, where `name`
+    # equals `path`.
+    #
+    # maxi-tools/ci exists precisely for this: it is the public mirror of
+    # maxi-config's lane workflows. The SHA is ci main at e8a4eec (ci#55),
+    # which carries repo_policy: fork-upstream (ci#54) AND names the public
+    # fetch-policy action. ci#54's pin still called
+    # maxi-tools/maxi-config/.github/actions/fetch-policy, which a public
+    # repo cannot resolve, so the lane died at job setup. A fork of
+    # upstream does not run house-style fmt/clippy against code it rebases
+    # onto.
+    # checkout_submodules is required: freya-icons' build script reads
+    # crates/freya-icons/external/lucide, which is a submodule. Without it
+    # lane-test dies in the build script before any test runs.
+    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@e8a4eec2da9caa3f89d4aa05f62a1c7d016f9ecb  # maxi-tools/ci main; public fetch-policy (ci#55)
     permissions:
       contents: write
       pull-requests: read
@@ -40,5 +64,8 @@ jobs:
       id-token: write
       pages: write
     with:
-      repo_policy: standard-rust
-    secrets: inherit
+      repo_policy: fork-upstream
+      checkout_submodules: true
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
