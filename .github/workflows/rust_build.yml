@@ -78,8 +78,8 @@ jobs:
       run: just ba
 
   build-macos:
-    needs: route
-    if: ${{ always() && needs.route.outputs.rust-touched != 'false' }}
+    needs: [route, build]
+    if: ${{ always() && needs.route.outputs.rust-touched != 'false' && !cancelled() && !failure() }}
     runs-on: [self-hosted, macOS, ARM64]
     concurrency:
       group: rust-build-macos-${{ github.ref_name }}
