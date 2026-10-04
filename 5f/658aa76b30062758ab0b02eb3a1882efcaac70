@@ -1,0 +1,24 @@
+.github/actions/setup-runner/action.yml
+  h_cebe5b6d461c32 312-341,344,366-371,386-388,390,395-397,399,407-408,440-528,536-538,730-749,752-755,757-767,769-796,799-801,805,824-833,1114-1119
+.github/workflows/ci.yml
+  h_cebe5b6d461c32 25-48
+.github/workflows/codeql.yml
+  h_cebe5b6d461c32 28-77,97-103,167-174,179-180,195-243,391-395
+.github/workflows/maxi-review.yml
+  h_cebe5b6d461c32 108-114,119-122,244-267,563-566
+.github/workflows/review-gate.yml
+  h_cebe5b6d461c32 99-110,112,119
+.github/workflows/rust_test.yml
+  h_cebe5b6d461c32 247-283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5f658aa76b30062758ab0b02eb3a1882efcaac70",
+  "prompts": {},
+  "humans": {
+    "h_cebe5b6d461c32": {
+      "author": "Maxi Boch <874012+maxiboch@users.noreply.github.com>"
+    }
+  }
+}
