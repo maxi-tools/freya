@@ -51,6 +51,8 @@ jobs:
       run: just f-check
 
   build-macos:
+    needs: [build]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: [self-hosted, macOS, ARM64]
     concurrency:
       group: rust-lint-macos-${{ github.ref_name }}
