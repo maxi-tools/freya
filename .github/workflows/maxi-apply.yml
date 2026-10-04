@@ -103,7 +103,7 @@ jobs:
         env:
           SENDER_LOGIN: ${{ github.event.sender.login }}
         run: |
-          echo "::error::Untrusted sender (${{SENDER_LOGIN}}): this job only runs code pushed by trusted senders on self-hosted runners. Push a commit as a trusted sender or re-run via workflow_dispatch."
+          echo "::error::Untrusted sender (${SENDER_LOGIN}): this job only runs code pushed by trusted senders on self-hosted runners. Push a commit as a trusted sender or re-run via workflow_dispatch."
           exit 1
 
       - name: Authorize requester
