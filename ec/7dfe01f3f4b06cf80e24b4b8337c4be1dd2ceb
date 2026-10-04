@@ -1,0 +1,18 @@
+.github/actions/setup-runner/action.yml
+  h_cebe5b6d461c32 312-341,344,366-371,386-388,390,395-397,399,407-408,1114-1119
+.github/workflows/ci.yml
+  h_cebe5b6d461c32 35-59,67-71
+.github/workflows/review-gate.yml
+  h_cebe5b6d461c32 119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ec7dfe01f3f4b06cf80e24b4b8337c4be1dd2ceb",
+  "prompts": {},
+  "humans": {
+    "h_cebe5b6d461c32": {
+      "author": "Maxi Boch <874012+maxiboch@users.noreply.github.com>"
+    }
+  }
+}
