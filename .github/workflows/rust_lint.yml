@@ -13,7 +13,44 @@ permissions:
   contents: read
 
 jobs:
+
+  # One classifier for this repository's heavy lanes, from the public
+  # maxi-tools/ci mirror (freya is public and cannot resolve the private
+  # maxi-config). The classifier is maxi-core's compiled-inputs gate,
+  # published as an action: it answers "can any changed path reach
+  # rustc" and fails towards 'true' (run every lane) on every internal
+  # failure -- an unread diff, an unread index, a dispatch or push event
+  # with no PR file list.
+  #
+  # The verdict drives a JOB-LEVEL skip on each heavy job below, not a
+  # workflow-level paths filter: `build (self-hosted, macOS, ARM64)` is
+  # a REQUIRED context in this repository's ruleset, and a skipped job
+  # still publishes its check run as `skipped` (which required-status-
+  # check evaluation accepts) while a paths-filtered workflow publishes
+  # NOTHING and the PR can never merge.
+  #
+  # Measured 2026-10-03 on the pin-only fan-out PRs (#57, #60: one-line
+  # review-gate.yml pin bumps): 4 macOS + 1 Windows build/test jobs ran
+  # for a diff that cannot change any build output.
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      rust-touched: ${{ steps.rust-touched.outputs.rust-touched || 'true' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - id: rust-touched
+        uses: maxi-tools/ci/.github/actions/rust-touched@main
+        with:
+          token: ${{ github.token }}
   build:
+    needs: route
+    if: ${{ always() && needs.route.outputs.rust-touched != 'false' }}
     runs-on: [self-hosted, Linux, ARM64]
     concurrency:
       group: rust-lint-${{ github.ref_name }}
@@ -51,6 +88,8 @@ jobs:
       run: just f-check
 
   build-macos:
+    needs: route
+    if: ${{ always() && needs.route.outputs.rust-touched != 'false' }}
     runs-on: [self-hosted, macOS, ARM64]
     concurrency:
       group: rust-lint-macos-${{ github.ref_name }}
