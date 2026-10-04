@@ -41,6 +41,8 @@ jobs:
       run: just ba
 
   build-macos:
+    needs: [build]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: [self-hosted, macOS, ARM64]
     concurrency:
       group: rust-build-macos-${{ github.ref_name }}
