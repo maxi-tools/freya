@@ -1,0 +1,24 @@
+.github/scripts/ci_pr_green.py
+  h_cebe5b6d461c32 54,73-175,337-344,347-349,355-364,367-393,395-398,409,413-437,442-458,497-499,506-510,538,551-552,560-567
+.github/scripts/ci_pr_green_test.py
+  h_cebe5b6d461c32 11,13-14,24-36,85,103,114,128,134,147,158,161-377,380,391,401,406-421,429,438,451,467,481,492,505,549,551-595,652,709-822
+.github/workflows/qodana.yml
+  h_cebe5b6d461c32 425-466,577-590,592-605,607,610-671,673-674,737-922,1198-1199,1203-1206,1210,1342-1343,1563-1580,1583-1584,1587,1599-1625,1987-1993
+.github/workflows/review-gate.yml
+  h_cebe5b6d461c32 119
+.github/workflows/rust_build.yml
+  h_cebe5b6d461c32 81-82
+.github/workflows/rust_lint.yml
+  h_cebe5b6d461c32 91-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "350fa6e9a23fe0893c40426a66f66af025a39f99",
+  "prompts": {},
+  "humans": {
+    "h_cebe5b6d461c32": {
+      "author": "Maxi Boch <874012+maxiboch@users.noreply.github.com>"
+    }
+  }
+}
