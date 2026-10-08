@@ -77,6 +77,11 @@ on:
   # nothing.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
+  # Run the same unfiltered cheap sentinel for merge-queue candidates. Unlike
+  # push, this intentionally has no paths filter: the required check must exist
+  # even for a docs-only merge group.
+  merge_group:
+    types: [checks_requested]
 
 concurrency:
   group: qodana-${{ github.repository }}-${{ github.ref }}-${{ github.event_name == 'schedule' && 'nightly' || 'interactive' }}
@@ -122,8 +127,9 @@ jobs:
     # admitted by construction and a trigger added to `on:` later cannot be
     # dropped by forgetting to extend a list.
     #
-    # The scope half keeps the sentinel on PR/push, which is what it is for:
-    # `schedule` and `workflow_dispatch` exist to run the full scan below.
+    # The scope half keeps the sentinel on PR/push plus admitted merge-queue
+    # groups (checks_requested); `schedule` and `workflow_dispatch` exist to
+    # run the full scan below.
     # Admitting them here would also run the degraded-mode merge gate on every
     # nightly, failing it whenever CI_DEGRADED_UNTIL is unset or expired even
     # though the requested scan succeeded, and burning another fleet runner to
@@ -134,7 +140,11 @@ jobs:
         github.event_name != 'pull_request' ||
         github.event.pull_request.head.repo.full_name == github.repository
       ) &&
-      (github.event_name == 'pull_request' || github.event_name == 'push')
+      (
+        github.event_name == 'pull_request' ||
+        github.event_name == 'push' ||
+        (github.event_name == 'merge_group' && github.event.action == 'checks_requested')
+      )
     runs-on: [self-hosted, Linux]
     timeout-minutes: 5
     permissions:
@@ -274,6 +284,7 @@ jobs:
         github.event_name == 'schedule' ||
         github.event_name == 'workflow_dispatch' ||
         (github.event_name != 'pull_request' &&
+         github.event_name != 'merge_group' &&
          vars.CI_ENFORCEMENT_MODE == 'strict') ||
         (github.event_name == 'pull_request' &&
          contains(github.event.pull_request.labels.*.name, 'run-qodana'))
@@ -2095,6 +2106,6 @@ jobs:
 
       - name: Upload SARIF to GitHub
         if: always() && steps.scan.outcome != 'skipped' && steps.code_scanning.outputs.available == 'true'
-        uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d # v3.37.9
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: ${{ runner.temp }}/qodana/results/qodana.sarif.json
