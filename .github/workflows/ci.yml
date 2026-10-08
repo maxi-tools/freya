@@ -38,7 +38,7 @@ jobs:
     # self-hosted job in the reusable chain opens with a `Trust admission`
     # step that fails RED for anything untrusted (fork PRs, merge-queue
     # lifecycle actions, non-owner dispatches) before checkout.
-    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@7e019c7131f9e97c606bc423bb12e964eaa5b3e7  # maxi-tools/ci@wt/t_c53018b7-trust-step1 = a51736ac (required toolchain input at the 7e38f4b dtolnay pin) + trust admission as step 1 of every self-hosted job and an aggregate that fails unexplained lane skips (maxi-config#1028 rework, verifier t_e5bf80a3); target deps + cleanup; sign-publish contents:read kept; skip_swift_build forwarded to package per declared input
+    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@16748e0311437f4cf22f233f0831d09e559e309f  # maxi-tools/ci@ci/mac-lanes-input-b8f2e1a4 (ci#82) = ci#91 trust-step1 + standalone-Mac-lane handoff + linux_gate fail-closed residual + check/test explicit plan gate + lanes drop on cancel
     permissions:
       contents: write
       pull-requests: read
