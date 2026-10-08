@@ -1,62 +1,44 @@
+# maxi-config-owned standard Rust CI wrapper.
 # Thin standard Rust CI wrapper for maxi-tools repos.
-# Source of truth: maxi-config/workflows/rust-ci.yml
+# Source of truth: maxi-config/workflows/standard-rust-ci-wrapper.yml --
+# this file, when you are reading it inside maxi-config. Its lane policy
+# comes from maxi-config/.github/workflows/rust-ci.yml.
 # Copy to .github/workflows/ci.yml in simple Rust repos that can use the
 # canonical lane policy without repo-local CI customization.
+# Reading a consumer copy? Edit it in maxi-config, not here:
+# scripts/sync-maxi-review.sh overwrites this copy on the next fan-out.
 
 name: CI
 
-# Cancel superseded PR runs, never main's.
-#
-# A superseded PR run was testing a stale merge base that gets re-verified once
-# main is integrated, so dropping it costs nothing. A push to main is the
-# opposite case: `github.ref` is `refs/heads/main` for every merge, so a single
-# shared group meant each merge cancelled the previous merge's verification, and
-# unlike a PR there is no later re-run — that commit has already shipped.
-#
-# This does not guarantee every main commit is tested. The group keeps one
-# running slot and one pending slot, and a newly queued run evicts whatever was
-# pending, so a burst of three or more merges still drops the middle ones. What
-# it does stop is a run that has already started being killed outright.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action) || contains(fromJSON('["run-ci","run-clippy"]'), github.event.label.name)) }}
 
 on:
   push:
     branches: [main, release/**]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  # Run the merge-gate for merge-queue candidates so the required
+  # `merge-gate / merge-gate` aggregate reports on queue heads. The reusable's
+  # aggregate admits only the `checks_requested` action (the queue-admission
+  # hand-shake); the five lifecycle actions mint no required-context run.
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
 
 permissions: {}
 
 jobs:
   merge-gate:
-    # The PUBLIC mirror, pinned. freya is a public repository and
-    # maxi-tools/maxi-config is private; GitHub will not resolve a `uses:`
-    # from a public repo into a private one. The call simply fails to start:
-    # the run ends in ~1s with ZERO jobs, no logs, and nothing to re-run
-    # (`gh run rerun` answers "This workflow run cannot be retried").
-    #
-    # It is worse than an ordinary red, because GitHub reads a workflow's
-    # `name:` from the default branch and falls back to the PATH when it
-    # cannot resolve the file. This workflow was registered as
-    # `.github/workflows/ci.yml` rather than `CI`, which is the visible tell
-    # that it had never started successfully -- see the API, where `name`
-    # equals `path`.
-    #
-    # maxi-tools/ci exists precisely for this: it is the public mirror of
-    # maxi-config's lane workflows. The SHA is ci main at e8a4eec (ci#55),
-    # which carries repo_policy: fork-upstream (ci#54) AND names the public
-    # fetch-policy action. ci#54's pin still called
-    # maxi-tools/maxi-config/.github/actions/fetch-policy, which a public
-    # repo cannot resolve, so the lane died at job setup. A fork of
-    # upstream does not run house-style fmt/clippy against code it rebases
-    # onto.
-    # checkout_submodules is required: freya-icons' build script reads
-    # crates/freya-icons/external/lucide, which is a submodule. Without it
-    # lane-test dies in the build script before any test runs.
-    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@e8a4eec2da9caa3f89d4aa05f62a1c7d016f9ecb  # maxi-tools/ci main; public fetch-policy (ci#55)
+    # No job-level `if:` here, deliberately -- trust is never a job-level
+    # condition (a skipped caller makes every required lane context absent or
+    # `skipped`, which an aggregate can read as green). The `merge_group`
+    # trigger above subscribes to `checks_requested` only, and every
+    # self-hosted job in the reusable chain opens with a `Trust admission`
+    # step that fails RED for anything untrusted (fork PRs, merge-queue
+    # lifecycle actions, non-owner dispatches) before checkout.
+    uses: maxi-tools/ci/.github/workflows/rust-ci.yml@16748e0311437f4cf22f233f0831d09e559e309f  # maxi-tools/ci@ci/mac-lanes-input-b8f2e1a4 (ci#82) = ci#91 trust-step1 + standalone-Mac-lane handoff + linux_gate fail-closed residual + check/test explicit plan gate + lanes drop on cancel
     permissions:
       contents: write
       pull-requests: read
