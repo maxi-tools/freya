@@ -20,6 +20,30 @@ jobs:
       group: benchmarks-${{ github.ref_name }}
       cancel-in-progress: true
     steps:
+      # The fleet trust gate, copied from maxi-config#1019 (itself ported from
+      # maxi-core#4875): untrusted senders fail fast BEFORE checkout. This repository
+      # is PUBLIC and the org's `Default` runner group admits public repositories, so
+      # a fork pull request would otherwise reach these self-hosted machines with
+      # PR-authored code; the repo's all_external_contributors approval policy is the
+      # only other barrier and is not a code-level one. The gate is the FIRST step,
+      # never a job-level `if`: a job-level guard guards the workflow file as committed
+      # to the base branch, while a first step runs even when a pull request rewrites
+      # this file (GitHub runs the workflow from the PR's merge commit).
+      #
+      # Admitted: push and schedule (organisational events, post-merge code);
+      # workflow_dispatch and same-repository pull requests only from trusted senders
+      # 874012 (maxiboch) and 264883562 (maxi-tools-auth[bot]); and
+      # merge_group/checks_requested (GitHub assembled the ref from PRs already
+      # admitted to the queue). Dependabot is admitted by actor name, the same
+      # exemption the runner-routing fallbacks use.
+      - name: trust gate
+        if: ${{ github.actor != 'dependabot[bot]' && !(github.event_name == 'push' || github.event_name == 'schedule' || ((github.event.sender.id == 874012 || github.event.sender.id == 264883562) && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))) || (github.event_name == 'merge_group' && github.event.action == 'checks_requested')) }}
+        env:
+          SENDER_LOGIN: ${{ github.event.sender.login }}
+        run: |
+          echo "::error::Untrusted sender (${SENDER_LOGIN}): this job only runs code pushed by trusted senders on self-hosted runners. Push a commit as a trusted sender or re-run via workflow_dispatch."
+          exit 1
+
       - uses: actions/checkout@v6
         with:
           submodules: true
