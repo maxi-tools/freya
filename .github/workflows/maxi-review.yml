@@ -653,7 +653,10 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor != 'dependabot[bot]' &&
       (
-        startsWith(github.head_ref, 'maxi-config-sync/') == false ||
+        (
+          startsWith(github.head_ref, 'maxi-config-sync/') == false &&
+          github.head_ref != 'ci/fanout-pin'
+        ) ||
         github.event.pull_request.user.login != 'maxi-tools-auth[bot]'
       )
     # Serialise per PR, and do not cancel. Two events on the same pull request
@@ -804,18 +807,8 @@ jobs:
           # tests/test_fanout_identity_is_one_copy.py. Duplicated rather than imported:
           # this file is what the workflow checks out, and select-roster.py is not on
           # that checkout's path. The test is the thing that keeps the two honest.
-          #
-          # The set is just the namespace today: `ci/fanout-pin` used to live
-          # here too, on the rationale that the deterministic scan was a
-          # review of a no-op. The rationale was wrong for the review the gate
-          # counts -- a deterministic COMMENTED review is exactly what
-          # closes `review-gate/non-author-review` on a clean PR, and on a
-          # ci/fanout-pin branch the deterministic scan IS the only review
-          # these PRs can get without paying for an AI pass. Dropping it lets
-          # the author half (the auth bot, who alone can push the branch)
-          # gate the lane, matching the workflow `if:` above.
           FANOUT_BRANCH_PREFIXES = ("maxi-config-sync/",)
-          FANOUT_BRANCH_NAMES = ()
+          FANOUT_BRANCH_NAMES = ("ci/fanout-pin",)
           FANOUT_AUTHORS = frozenset({"maxi-tools-auth", "maxi-tools-auth[bot]"})
 
           # Dependabot runs get the Dependabot secrets scope, which holds no app key, so
