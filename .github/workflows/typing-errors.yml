@@ -5,6 +5,9 @@ on:
   pull_request: {}
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 jobs:
   spelling:
     runs-on: ubuntu-latest
@@ -16,3 +19,19 @@ jobs:
           isolated: true
           config: ./_typos.toml
           files: .
+
+  # Hosted, not the fleet: this test READS the workflow files; running it on a
+  # self-hosted runner would be one more untrusted-PR-reachable job to gate.
+  # The test is derived, not a list -- a new self-hosted PR-reachable job fails
+  # here the moment it is written -- and its mutation coverage is documented in
+  # the script's docstring (drop a gate, drift the predicate, or move the gate
+  # off first position: each fails this suite).
+  workflow-trust-gate:
+    name: 'check: workflow trust gates'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Every self-hosted PR job carries the trust gate
+        run: python3 .github/scripts/ci_trust_gate_test.py
