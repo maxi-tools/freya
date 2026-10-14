@@ -1801,7 +1801,11 @@ impl PathBuilder {
         unimplemented!("This is mocked")
     }
 
-    pub fn add_path(&mut self, _src: &Path) -> &mut Self {
+    pub fn add_path(
+        &mut self,
+        _src: &Path,
+        _mode: impl Into<Option<PathAddPathMode>>,
+    ) -> &mut Self {
         unimplemented!("This is mocked")
     }
 
